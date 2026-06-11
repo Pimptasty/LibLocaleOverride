@@ -108,7 +108,12 @@ function Convert-GlobToRegex([string]$glob) {
     $escaped = $escaped -replace '\\\?', '[^\\]'    # ? -> one char
 
     $prefix = if ($matchAnywhere) { '(^|\\)' } else { '^' }
-    $suffix = if ($isDir)         { '(\\|$)' } else { '$' }
+    # Match the entry exactly OR anything beneath it. .pkgmeta lists directories
+    # WITHOUT a trailing slash (the BigWigs packager appends "/*"), so a bare
+    # "docs" / ".github" entry must still skip the folder's CONTENTS, not just an
+    # exact-name file. For real files the "\" branch never matches, so this is
+    # equivalent to "$". ($isDir is kept only to strip a trailing slash above.)
+    $suffix = '(\\|$)'
     return "$prefix$escaped$suffix"
 }
 
