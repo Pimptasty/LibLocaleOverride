@@ -1,0 +1,36 @@
+<h1>LibLocaleOverride — Per-Addon Language Override for WoW Addons</h1>
+
+<p>A small embeddable library that lets an addon offer its <strong>own</strong> in-game language picker — so a player can read your addon in Dutch while their WoW client runs in English, without touching any other addon. It also bundles fonts for scripts WoW can't render (e.g. Thai), and refreshes the UI on a switch without a <code>/reload</code>.</p>
+
+<h2>The Problem</h2>
+
+<p>WoW addons normally lock their language to the game client via <code>GetLocale()</code>. A player whose client is English can't read a supported addon in their native language, and addons can't offer languages WoW doesn't ship at all. The one existing override — the global <code>GAME_LOCALE</code> (and the AddonLocale addon that wraps it) — is all-or-nothing: it retargets <em>every</em> AceLocale addon at once, and it can't switch at runtime.</p>
+
+<h2>The Solution</h2>
+
+<p>LibLocaleOverride keeps <strong>every</strong> registered locale table and merges them on demand (an English baseline + the chosen language on top, so a partial translation still falls back cleanly) — <strong>per addon</strong> and switchable live. Picking a language for one addon never affects another. A bundled-font manager covers non-Latin scripts, and a change callback lets widgets refresh in place.</p>
+
+<h2>For Developers</h2>
+
+<p>Embed via LibStub and register your locale tables:</p>
+
+<pre><code>local LLO = LibStub("LibLocaleOverride-1.0")
+LLO:RegisterLocale("MyAddon", "enUS", enUSTable, true)  -- baseline
+LLO:RegisterLocale("MyAddon", "nlNL", nlNLTable)
+LLO:SetStore("MyAddon", getOverrideFn, setOverrideFn)   -- your SavedVariable
+LLO:ApplyStored("MyAddon")                               -- at login
+local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD time
+</code></pre>
+
+<p>Add it to your addon as an <strong>external dependency</strong> — one canonical copy across your whole addon family. Read <code>L[key]</code> when you build a widget, never frozen at load, so a live language switch takes effect.</p>
+
+<h2>Recent Updates</h2>
+
+<p><strong>v0.1.0 (2026-06-11)</strong></p>
+<ul>
+<li>Initial scaffold: LibStub registration, the full API surface, a single multi-version TOC, MIT license, and packaging. Reference consumer: FastGuildInvite.</li>
+</ul>
+
+<h2>License</h2>
+
+<p>MIT. Original implementation — contains no third-party code beyond the public-domain LibStub.</p>

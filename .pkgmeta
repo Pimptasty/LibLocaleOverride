@@ -1,0 +1,37 @@
+# .pkgmeta
+package-as: LibLocaleOverride
+
+# Create the CurseForge project, then put its numeric id here to enable uploads:
+# curseforge-project-id: 0000000
+
+# Single hand-written multi-version TOC (one ## Interface line covers every
+# flavor), so the packager does NOT need to generate per-flavor TOCs.
+enable-toc-creation: no
+enable-nolib-creation: no
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+# No required-dependencies: this IS a base library. It vendors LibStub and
+# registers through it; consumers embed it as an external dependency.
+
+# Keep noise out of the zip.
+# NOTE: directory entries must NOT have a trailing slash. The packager appends
+# "/*" to directories so the glob can match files inside them; a trailing slash
+# produces "docs//*", which matches nothing and silently ships the folder.
+ignore:
+  - .git
+  - .github
+  - .vscode
+  - .claude
+  - docs
+  - "*.txt"
+  - "*.ps1"
+  - "*.bat"
+  - "*.code-workspace"
+  - ".luarc.json"
+  - ".markdownlint.json"
+  - "CLAUDE.md"
+  - ".markdownlintignore"
+  - "CHANGELOG_ARCHIVE.md"

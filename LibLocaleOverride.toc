@@ -1,0 +1,13 @@
+## Interface: 11508, 20505, 30403, 40400, 50503, 110207, 120005, 120007
+## Title: |cffFF8000Lib: LocaleOverride|r
+## Notes: Per-addon, runtime-switchable UI language override + bundled-font manager. Lets a player pick an addon's interface language independently of the WoW client — including locales WoW doesn't ship. Embeddable via LibStub.
+## Author: Pimptasty
+## Version: @project-version@
+## Category: Library
+## DefaultState: enabled
+## X-License: MIT
+# Add ## X-Curse-Project-ID: <id> here once the CurseForge project exists.
+
+libs\LibStub\LibStub.lua
+
+LibLocaleOverride-1.0.lua
