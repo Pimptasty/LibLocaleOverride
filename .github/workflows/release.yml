@@ -1,6 +1,8 @@
 name: Package and release
 
-on:
+# "on" is quoted so YAML 1.1 linters don't parse the key as the boolean true;
+# GitHub Actions reads it identically.
+"on":
   push:
     tags:
       - '**'   # run when you push an annotated tag

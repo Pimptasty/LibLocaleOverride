@@ -6,8 +6,9 @@
 ## Category: Library
 ## DefaultState: enabled
 ## X-License: MIT
-# Add ## X-Curse-Project-ID: <id> here once the CurseForge project exists.
+## X-Curse-Project-ID: 1572742
 
 libs\LibStub\LibStub.lua
 
 LibLocaleOverride-1.0.lua
+LibLocaleOverride-AceGUI-1.0.lua

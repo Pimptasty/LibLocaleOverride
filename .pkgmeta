@@ -1,8 +1,7 @@
 # .pkgmeta
 package-as: LibLocaleOverride
 
-# Create the CurseForge project, then put its numeric id here to enable uploads:
-# curseforge-project-id: 0000000
+curseforge-project-id: 1572742
 
 # Single hand-written multi-version TOC (one ## Interface line covers every
 # flavor), so the packager does NOT need to generate per-flavor TOCs.
@@ -26,7 +25,8 @@ ignore:
   - .vscode
   - .claude
   - docs
-  - "*.txt"
+  # *.txt is NOT ignored: each bundled font ships its OFL.txt, which the SIL Open
+  # Font License requires to be distributed alongside the font.
   - "*.ps1"
   - "*.bat"
   - "*.code-workspace"

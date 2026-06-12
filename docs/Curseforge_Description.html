@@ -26,9 +26,12 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 
 <h2>Recent Updates</h2>
 
-<p><strong>v0.1.0 (2026-06-11)</strong></p>
+<p><strong>v0.1.0 (2026-06-12)</strong> — first release</p>
 <ul>
-<li>Initial scaffold: LibStub registration, the full API surface, a single multi-version TOC, MIT license, and packaging. Reference consumer: FastGuildInvite.</li>
+<li>Per-addon, runtime language override: an addon offers its own language picker, switchable live with no <code>/reload</code>, and untranslated text falls back to English.</li>
+<li>Bundled fonts for scripts WoW can't render — Thai, Hindi/Marathi, Bengali, Tamil, Telugu — applied only where that script actually appears, so a language list mixing many scripts never shows blank boxes.</li>
+<li>Optional AceGUI dropdown that renders non-Latin languages in both the selected value and the open list.</li>
+<li>Reference consumer: FastGuildInvite.</li>
 </ul>
 
 <h2>License</h2>
