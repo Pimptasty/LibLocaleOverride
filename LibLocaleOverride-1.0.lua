@@ -26,11 +26,33 @@ USAGE (consumer side):
     local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD time
     -- in Settings, on change:  LLO:SetOverride("MyAddon", code)  ("auto" or a code)
 
+API INDEX (all keyed by your addon name unless noted):
+  locale   RegisterLocale, SetStore, ApplyStored, SetOverride, GetLocale, GetActiveCode,
+           GetOverride, GetAvailable, HasLocale, UnregisterAddon
+  font     GetFont, FontForText, FontObject, ApplyFontToString, ApplyFontToFrame,
+           RegisterFont, RegisterManagedFontString, UnregisterManagedFontString
+  events   RegisterCallback, UnregisterCallback
+  text     SplitToBytes (byte-aware chat-chunking; not addon-keyed)
+  AceGUI (LibLocaleOverride-AceGUI-1.0): RegisterAceGUIDropdown, AttachTabGroupFont,
+           IsAnyPulloutOpen, OnPulloutClose, HookCleanRelease
+  RTL    (LibLocaleOverride-RTL-1.0):    Shape, IsRTL, IsRTLCode
+
+NOTES for consumers:
+  * GetFont/GetActiveCode lazily build on first call, so they're safe before GetLocale --
+    but still prefer calling ApplyStored early so the stored override is live before build.
+  * The shared tables lib.scripts / lib.scriptOrder / lib.localeScript / lib.rtlLocales /
+    lib.languageNames are READ-ONLY: mutating them breaks font routing for every consumer.
+  * Teardown (transient frames / test resets): UnregisterManagedFontString, UnregisterCallback,
+    UnregisterAddon. Pooled/persistent strings need no unregister.
+
 Original implementation -- contains no third-party code beyond the public-domain
 LibStub. License: MIT (see LICENSE).
 ------------------------------------------------------------------------------]]
 
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 1
+-- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
+-- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
+-- added after the initial MINOR=1).
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 3
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -80,6 +102,54 @@ lib.scripts = {
 	Bengali    = { font = FONT_DIR .. "Bengali\\NotoSansBengali-Regular.ttf",       match = bytes("\224\166", "\224\167") },
 	Tamil      = { font = FONT_DIR .. "Tamil\\NotoSansTamil-Regular.ttf",           match = bytes("\224\174", "\224\175") },
 	Telugu     = { font = FONT_DIR .. "Telugu\\NotoSansTelugu-Regular.ttf",         match = bytes("\224\176", "\224\177") },
+	Gurmukhi   = { font = FONT_DIR .. "Gurmukhi\\NotoSansGurmukhi-Regular.ttf",     match = bytes("\224\168", "\224\169") },
+	-- Hebrew is 2-byte UTF-8 (lead D6/D7), not 3-byte like the blocks above; the
+	-- single-byte matchers find any D6/D7 lead (Cyrillic is D0/D1, so no clash).
+	Hebrew     = { font = FONT_DIR .. "Hebrew\\NotoSansHebrew-Regular.ttf",         match = bytes("\214", "\215") },
+	-- Arabic: base block is 2-byte (lead D8-DB); lib:Shape reshapes letters to
+	-- 3-byte presentation forms (EF AD..BB), so the matcher must catch both. The
+	-- reshaping itself lives in LibLocaleOverride-RTL-1.0.
+	Arabic     = { font = FONT_DIR .. "Arabic\\NotoSansArabic-Regular.ttf",
+		match = function(s) return s ~= nil and (s:find("[\216-\219]") or s:find("\239[\173-\187]")) and true or false end },
+	-- Latin-extended fallback: the WoW client font renders Latin-1 but BOXES Latin
+	-- Extended-A/B (Vietnamese đ/ư/ơ/ĩ, Hausa ƙ/ɓ/ɗ, Turkish ğ/ş/İ) and Latin
+	-- Extended Additional (Vietnamese tone marks). Matches lead C4-C9 (U+0100-027F)
+	-- and E1 B8-BB (U+1E00-1EFF). Latin-1 accents (C3) are left to the client font,
+	-- so German/French/Spanish never switch fonts. Noto Sans covers all of these.
+	Latin      = { font = FONT_DIR .. "Latin\\NotoSans-Regular.ttf",
+		match = function(s) return s ~= nil and (s:find("[\196-\201]") or s:find("\225[\184-\187]")) and true or false end },
+	-- Japanese: bundled because the client's CJK fallback covers Han but is unreliable
+	-- for kana on non-JP clients (and AceGUI's tab restyle kills the fallback anyway).
+	-- The matcher catches Hiragana + Katakana (E3 81-83 = U+3040-30FF), which are
+	-- Japanese-specific; pure-Han text (shared with Chinese) is left to the client font
+	-- so we don't hijack Chinese. The active jaJP locale gets this font via localeScript.
+	Japanese   = { font = FONT_DIR .. "Japanese\\NotoSansJP-Regular.ttf",
+		match = function(s) return s ~= nil and s:find("\227[\129-\131]") and true or false end },
+	-- Korean: Hangul syllables (lead EA-ED = U+AC00-D7A3) are Korean-specific, so the
+	-- matcher is unambiguous. Bundled because the client can't render Hangul off a KR client.
+	Korean     = { font = FONT_DIR .. "Korean\\NotoSansKR-Regular.ttf",
+		match = function(s) return s ~= nil and s:find("[\234-\237]") and true or false end },
+	-- Chinese (Simplified / Traditional): Han ideographs are shared between them AND with
+	-- Japanese kanji, so they CAN'T be told apart by codepoint -- a per-text matcher would
+	-- misroute (and could box a variant-only glyph). So these never match in FontForText;
+	-- the tab strip picks the right one via the ACTIVE locale (localeScript zhCN/zhTW), and
+	-- per-text Han is left to the client font. Both fonts carry the full Han range.
+	ChineseSimplified  = { font = FONT_DIR .. "ChineseSimplified\\NotoSansSC-Regular.ttf",  match = function() return false end },
+	ChineseTraditional = { font = FONT_DIR .. "ChineseTraditional\\NotoSansTC-Regular.ttf", match = function() return false end },
+	-- Cyrillic: lead D0/D1 (U+0400-04FF), distinct from Hebrew D6/D7 and Arabic D8-DB.
+	-- Reuses the bundled Noto Sans (the latin-greek-cyrillic build carries Cyrillic too).
+	Cyrillic   = { font = FONT_DIR .. "Latin\\NotoSans-Regular.ttf", match = bytes("\208", "\209") },
+}
+
+-- Deterministic match order for lib:FontForText. pairs(lib.scripts) has UNDEFINED
+-- order, so a string that matches two scripts (e.g. a name mixing Latin-extended and
+-- Arabic) could resolve to either font run-to-run. Fixed order: specific scripts first,
+-- Latin (the broadest fallback) LAST, so a mixed name resolves to its non-Latin script.
+-- Reassigned each load alongside lib.scripts so a newer library version's order wins.
+lib.scriptOrder = {
+	"Thai", "Devanagari", "Bengali", "Gurmukhi", "Tamil", "Telugu",
+	"Japanese", "Korean", "Hebrew", "Arabic", "Cyrillic",
+	"ChineseSimplified", "ChineseTraditional", "Latin",
 }
 
 -- Which bundled script an override LOCALE renders in -- used when that locale is
@@ -91,6 +161,20 @@ lib.localeScript = {
 	bnIN = "Bengali",    bnBD = "Bengali",
 	taIN = "Tamil",
 	teIN = "Telugu",
+	heIL = "Hebrew",
+	arSA = "Arabic", urPK = "Arabic", faIR = "Arabic",
+	-- Latin-script override locales whose letters reach beyond Latin-1 (so the tab
+	-- strip's GetFont returns Noto Sans). Swahili / Nigerian Pidgin stay on the
+	-- client font (ASCII-only) and need no entry.
+	viVN = "Latin", haNG = "Latin", trTR = "Latin",
+	paIN = "Gurmukhi",
+	jaJP = "Japanese",
+	-- CJK + Cyrillic are WoW-native locales, but as OVERRIDES on a non-native client
+	-- their scripts box (the client font lacks them + AceGUI's raw SetFont kills the
+	-- fallback), so they get a bundled font like every other non-Latin script.
+	koKR = "Korean",
+	zhCN = "ChineseSimplified", zhTW = "ChineseTraditional",
+	ruRU = "Cyrillic",
 }
 
 -- The bundled font for an ACTIVE locale code (nil when the locale needs none).
@@ -101,6 +185,91 @@ local function localeFont(code)
 	local name = code and lib.localeScript[code]
 	local s    = name and lib.scripts[name]
 	return s and s.font or nil
+end
+
+-- ===========================================================================
+-- font application  --  the ONE place that decides HOW a font reaches a string
+-- ===========================================================================
+
+-- Bundled fonts are applied as cached Font OBJECTS, never via a raw
+-- FontString:SetFont. A raw SetFont to a script-only TTF turns OFF WoW's
+-- glyph-fallback chain, and that "off" state lingers on a recycled/pooled frame
+-- even after a later SetFontObject -- so a string that once showed Thai would then
+-- box CJK / Cyrillic / Hangul. Driving every site through font objects keeps
+-- fallback intact. Objects are cached per (path,size,flags) and created lazily.
+local fontObjects, fontObjN = {}, 0
+local function bundledObject(path, size, flags)
+	local key = path .. "|" .. tostring(size or 0) .. "|" .. tostring(flags or "")
+	local obj = fontObjects[key]
+	if obj == nil then   -- nil = not tried yet; false = tried, the font file failed to load
+		fontObjN = fontObjN + 1
+		local o = _G.CreateFont("LibLocaleOverrideFont" .. fontObjN)
+		o:SetFont(path, size or 12, flags or "")
+		-- Verify the load via GetFont, NOT SetFont's return value: on a Font OBJECT (as
+		-- opposed to a FontString) that boolean is unreliable across client versions, and
+		-- gating on it fails CLOSED -- every bundled font would fall back to the base and
+		-- all non-Latin text would box. GetFont returns the path on success, nil when the
+		-- .ttf was missing/invalid; cache that failure (false) so we fall back cleanly
+		-- instead of rebuilding a dead object.
+		obj = o:GetFont() and o or false
+		fontObjects[key] = obj
+	end
+	return obj or nil
+end
+
+--- A cached Font OBJECT for a bundled font PATH (size/flags optional) -- lets a
+--- consumer build a fallback object from a bundled font (e.g. the Latin Noto, so a
+--- mixed list renders Latin rows in our font too). Returns nil for a nil path.
+function lib:FontObject(path, size, flags)
+	if not path then return nil end
+	return bundledObject(path, size, flags)
+end
+
+--- Apply the correct font to a single FontString -- the ONE applicator every font
+--- site funnels through (the frame walk, managed strings, the AceGUI dropdown and a
+--- consumer's own tab strip), so a fix here fixes them all. A bundled font goes on a
+--- cached Font OBJECT; text with no bundled font goes on `opts.base` (a
+--- fallback-capable object so the client's per-script fallback survives), or is left
+--- untouched when no base is given.
+---   opts.localeCode resolve by an EXPLICIT locale code (its bundled font), regardless
+---                  of the active locale or the text -- used to font each row of a
+---                  language picker in its OWN language's font (the only unambiguous
+---                  way for shared-Han scripts: zhCN vs zhTW vs jaJP).
+---   opts.byLocale  resolve via the addon's ACTIVE locale (GetFont) instead of the
+---                  string's own text (FontForText, the default -- best for mixed
+---                  lists where each row is its own language).
+---   opts.base      Font OBJECT to fall back to (e.g. GameFontNormalSmall); MUST be
+---                  fallback-capable. Omit to leave non-bundled strings as-is.
+---   opts.scale     multiply the bundled font's point size (default 1; dropdowns 0.90).
+---   opts.size/flags force the bundled font's size/flags (default: from base, else fs).
+function lib:ApplyFontToString(fs, addon, opts)
+	if not (fs and fs.SetFontObject and fs.GetFont) then return end
+	opts = opts or {}
+	local path
+	if opts.localeCode then
+		path = localeFont(opts.localeCode)
+	elseif opts.byLocale then
+		path = addon and self:GetFont(addon)
+	else
+		path = addon and self:FontForText(addon, fs.GetText and fs:GetText())
+	end
+	local obj
+	if path then
+		local size, flags = opts.size, opts.flags
+		if not size then
+			local _, s, f = (opts.base or fs):GetFont()
+			size = s or 12
+			if flags == nil then flags = f end
+		end
+		obj = bundledObject(path, size * (opts.scale or 1), flags)
+	end
+	-- A bundled font that failed to load (obj nil) falls back to the base object,
+	-- exactly as a string with no bundled script does.
+	if obj then
+		fs:SetFontObject(obj)
+	elseif opts.base then
+		fs:SetFontObject(opts.base)
+	end
 end
 
 -- ===========================================================================
@@ -139,13 +308,20 @@ local function applyOne(self, addon, entry)
 		return
 	end
 	if not item.GetFont or not item.SetFont then return end
-	local _, size, flags = item:GetFont()
-	size = size or 12
-	local font = self:FontForText(addon, item.GetText and item:GetText())
-	if font then
-		item:SetFont(font, size, flags)
-	elseif entry.origFont then
-		item:SetFont(entry.origFont, size, flags)
+	if entry.origObj then
+		-- Object-based path: keeps WoW's glyph fallback intact (see ApplyFontToString).
+		self:ApplyFontToString(item, addon, { base = entry.origObj })
+	else
+		-- The string's original font was a raw path (no Font object to restore to);
+		-- keep the legacy path-based behaviour for it.
+		local _, size, flags = item:GetFont()
+		size = size or 12
+		local font = self:FontForText(addon, item.GetText and item:GetText())
+		if font then
+			item:SetFont(font, size, flags)
+		elseif entry.origFont then
+			item:SetFont(entry.origFont, size, flags)
+		end
 	end
 end
 
@@ -153,7 +329,9 @@ local function applyFonts(self, addon)
 	local reg = self.registry[addon]
 	if not reg or not reg.managed then return end
 	for i = 1, #reg.managed do
-		applyOne(self, addon, reg.managed[i])
+		-- pcall per item: a broken managed FontString/callback must not abort the switch
+		-- for the others, nor block the change callbacks that follow (matches fireCallbacks).
+		pcall(applyOne, self, addon, reg.managed[i])
 	end
 end
 
@@ -209,6 +387,10 @@ end
 --- Bind the addon's SavedVariable accessor for its chosen override code so the
 --- library can persist/restore the selection without owning your DB.
 function lib:SetStore(addon, getFn, setFn)
+	-- Assert here so a wrong arg points at the consumer's call, not a later ApplyStored/
+	-- SetOverride that would otherwise error trying to call a non-function store.
+	assert(getFn == nil or type(getFn) == "function", MAJOR .. ":SetStore - getFn must be a function or nil")
+	assert(setFn == nil or type(setFn) == "function", MAJOR .. ":SetStore - setFn must be a function or nil")
 	local reg = ensureReg(self, addon)
 	reg.getStore = getFn
 	reg.setStore = setFn
@@ -246,6 +428,9 @@ end
 --- The resolved active locale code (never "auto"; "auto" resolves to the client).
 function lib:GetActiveCode(addon)
 	local reg = self.registry[addon]
+	-- Lazy-build so a consumer reading this before its first GetLocale/ApplyStored still
+	-- gets the resolved code. Don't ensureReg -- a getter shouldn't create a registry entry.
+	if reg and not reg.built then rebuild(self, addon) end
 	return reg and reg.code or nil
 end
 
@@ -279,6 +464,7 @@ end
 --- reach (e.g. AceGUI tab buttons), right after you (re)build those widgets.
 function lib:GetFont(addon)
 	local reg  = self.registry[addon]
+	if reg and not reg.built then rebuild(self, addon) end   -- lazy-build, like GetActiveCode
 	local code = reg and reg.code
 	if not code then return nil end
 	return (reg.fonts and reg.fonts[code]) or localeFont(code) or nil
@@ -294,10 +480,16 @@ end
 function lib:FontForText(addon, text)
 	if not text or text == "" then return nil end
 	local reg = self.registry[addon]
-	for name, s in pairs(lib.scripts) do
-		if s.match(text) then
-			-- A per-addon RegisterFont override (keyed by locale) wins over built-in.
+	for _, name in ipairs(lib.scriptOrder) do
+		local s = lib.scripts[name]
+		if s and s.match(text) then
+			-- A per-addon RegisterFont override (keyed by locale) wins over built-in. Prefer
+			-- the ACTIVE locale's override (deterministic when several codes share a script,
+			-- e.g. arSA/urPK/faIR all Arabic); else any registered override for this script.
 			if reg and reg.fonts then
+				if reg.code and lib.localeScript[reg.code] == name and reg.fonts[reg.code] then
+					return reg.fonts[reg.code]
+				end
 				for code, scr in pairs(lib.localeScript) do
 					if scr == name and reg.fonts[code] then return reg.fonts[code] end
 				end
@@ -308,41 +500,72 @@ function lib:FontForText(addon, text)
 	return nil
 end
 
--- Recursively re-font every FontString under a frame (regions + children). Each
--- FontString is fonted by `resolve(its text)` -- the per-text resolver -- so a
--- bundled font lands only on text in its own script and mixed-script surfaces (a
--- language picker) keep Cyrillic / CJK / Hangul on the client font. Returns the
--- number of FontStrings re-fonted.
-local function walkFonts(frame, resolve)
-	if not frame then return 0 end
-	local n = 0
+-- Recursively re-font every FontString under a frame (regions + children) by each
+-- string's own script, through lib:ApplyFontToString (the shared applicator -- so the
+-- object-based, fallback-safe rule applies here too). A bundled font lands only on
+-- text in its own script; mixed-script surfaces keep Cyrillic / CJK / Hangul on the
+-- client font, and non-bundled strings are left as-is.
+local function walkFonts(self, addon, frame, depth)
+	if not frame then return end
+	depth = depth or 0
+	if depth > 30 then return end   -- guard against pathologically deep / cyclic consumer frames
 	if frame.GetRegions then
 		for _, r in ipairs({ frame:GetRegions() }) do
-			if r.GetObjectType and r:GetObjectType() == "FontString" and r.SetFont and r.GetFont then
-				local font = resolve(r.GetText and r:GetText())
-				if font then
-					local _, size, flags = r:GetFont()
-					if size then r:SetFont(font, size, flags); n = n + 1 end
-				end
+			if r.GetObjectType and r:GetObjectType() == "FontString" then
+				self:ApplyFontToString(r, addon, nil)
 			end
 		end
 	end
 	if frame.GetChildren then
 		for _, child in ipairs({ frame:GetChildren() }) do
-			n = n + walkFonts(child, resolve)
+			walkFonts(self, addon, child, depth + 1)
 		end
 	end
-	return n
 end
 
 --- Re-font every FontString under `frame` (recursively) by each string's own
---- script, via lib:FontForText. For scripts the WoW default can't render (Thai,
---- Devanagari, ...); text the client already renders is left untouched. Call AFTER
---- (re)building content -- a rebuild resets fonts to default, so switching back to
---- a Latin locale needs no restore.
+--- script, via lib:ApplyFontToString. For scripts the WoW default can't render
+--- (Thai, Devanagari, ...); text the client already renders is left untouched. Call
+--- AFTER (re)building content -- a rebuild resets fonts to default, so switching back
+--- to a Latin locale needs no restore.
 function lib:ApplyFontToFrame(addon, frame)
 	if not frame then return end
-	walkFonts(frame, function(text) return self:FontForText(addon, text) end)
+	walkFonts(self, addon, frame)
+end
+
+-- ===========================================================================
+-- text utilities
+-- ===========================================================================
+
+--- Split `text` into chunks each at most `maxBytes` BYTES (default 255 -- WoW's
+--- SendChatMessage limit), breaking at whitespace/punctuation so words stay whole.
+--- Byte-aware (#s), which is the whole point in a locale library: Cyrillic is 2
+--- bytes/char and Thai/Indic/CJK 3, so a character count would lie about the wire
+--- size. Returns an array of chunks; an EMPTY array signals an unsplittable token
+--- longer than maxBytes (the caller should treat that as "won't send").
+function lib:SplitToBytes(text, maxBytes)
+	maxBytes = tonumber(maxBytes) or 255
+	if maxBytes < 1 then maxBytes = 255 end
+	if not text or text == "" then return {} end   -- nothing to send (no empty chunk)
+	local out = { "" }
+	while #text > 0 do
+		local _, e = text:find("[%s%.%,]")
+		local piece
+		if e then
+			piece = text:sub(1, e); text = text:sub(e + 1)
+		else
+			piece = text; text = ""
+		end
+		if #out[#out] + #piece <= maxBytes then
+			out[#out] = out[#out] .. piece
+		else
+			out[#out + 1] = piece
+		end
+	end
+	for i = 1, #out do
+		if #out[i] > maxBytes then return {} end
+	end
+	return out
 end
 
 -- ===========================================================================
@@ -365,13 +588,47 @@ end
 function lib:RegisterManagedFontString(addon, fontStringOrFn)
 	local reg = ensureReg(self, addon)
 	reg.managed = reg.managed or {}
+	-- Dedup FontStrings (not callbacks): AceGUI recycles widgets from a pool, so a
+	-- consumer that re-registers the same FontString on every rebuild would otherwise
+	-- grow reg.managed without bound (and re-font stale recycled strings on each switch).
+	-- Re-registering an already-managed string just re-applies the current locale to it.
+	if type(fontStringOrFn) ~= "function" then
+		reg.managedSet = reg.managedSet or {}
+		local existing = reg.managedSet[fontStringOrFn]
+		if existing then
+			applyOne(self, addon, existing)
+			return existing
+		end
+	end
 	local entry = { item = fontStringOrFn }
 	if type(fontStringOrFn) ~= "function" and fontStringOrFn.GetFont then
 		entry.origFont = select(1, fontStringOrFn:GetFont())
+		-- Snapshot the Font OBJECT too (when the string has one): it restores with the
+		-- glyph-fallback chain intact, where the raw path alone would not.
+		if fontStringOrFn.GetFontObject then entry.origObj = fontStringOrFn:GetFontObject() end
 	end
 	reg.managed[#reg.managed + 1] = entry
+	if type(fontStringOrFn) ~= "function" then reg.managedSet[fontStringOrFn] = entry end
 	applyOne(self, addon, entry)   -- apply current locale immediately
 	return entry
+end
+
+--- Stop managing a FontString (or callback) previously registered. Needed for TRANSIENT
+--- (non-pooled) strings -- a one-shot dialog's fontstring would otherwise stay in `managed`
+--- forever and get re-fonted on every locale switch. Pooled/persistent strings can be left.
+function lib:UnregisterManagedFontString(addon, fontStringOrFn)
+	local reg = self.registry[addon]
+	if not (reg and reg.managed) then return end
+	if reg.managedSet then reg.managedSet[fontStringOrFn] = nil end
+	for i = #reg.managed, 1, -1 do
+		if reg.managed[i].item == fontStringOrFn then table.remove(reg.managed, i) end
+	end
+end
+
+--- Forget EVERYTHING registered for an addon (locales, fonts, store, managed strings,
+--- callbacks) -- a clean teardown / test-harness reset. The addon may re-register after.
+function lib:UnregisterAddon(addon)
+	self.registry[addon] = nil
 end
 
 -- ===========================================================================
@@ -384,5 +641,15 @@ function lib:RegisterCallback(addon, fn)
 	assert(type(fn) == "function", MAJOR .. ":RegisterCallback - fn must be a function")
 	local reg = ensureReg(self, addon)
 	reg.callbacks = reg.callbacks or {}
+	for i = 1, #reg.callbacks do if reg.callbacks[i] == fn then return end end   -- dedup: never double-fire
 	reg.callbacks[#reg.callbacks + 1] = fn
+end
+
+--- Remove a change callback previously added with RegisterCallback.
+function lib:UnregisterCallback(addon, fn)
+	local reg = self.registry[addon]
+	if not (reg and reg.callbacks) then return end
+	for i = #reg.callbacks, 1, -1 do
+		if reg.callbacks[i] == fn then table.remove(reg.callbacks, i) end
+	end
 end

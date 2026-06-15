@@ -11,4 +11,6 @@
 libs\LibStub\LibStub.lua
 
 LibLocaleOverride-1.0.lua
+LibLocaleOverride-LanguageNames.lua
 LibLocaleOverride-AceGUI-1.0.lua
+LibLocaleOverride-RTL-1.0.lua

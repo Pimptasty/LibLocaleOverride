@@ -1,6 +1,6 @@
 <h1>LibLocaleOverride — Per-Addon Language Override for WoW Addons</h1>
 
-<p>A small embeddable library that lets an addon offer its <strong>own</strong> in-game language picker — so a player can read your addon in Dutch while their WoW client runs in English, without touching any other addon. It also bundles fonts for scripts WoW can't render (e.g. Thai), and refreshes the UI on a switch without a <code>/reload</code>.</p>
+<p>A small embeddable library that lets an addon offer its <strong>own</strong> in-game language picker — so a player can read your addon in Dutch while their WoW client runs in English, without touching any other addon. It bundles fonts for scripts WoW can't render (Thai, Indic, CJK, Hebrew, Arabic and more), supports right-to-left languages, and refreshes the UI on a switch without a <code>/reload</code>.</p>
 
 <h2>The Problem</h2>
 
@@ -26,6 +26,15 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 
 <h2>Recent Updates</h2>
 
+<p><strong>v0.2.0 (2026-06-14)</strong> — right-to-left, full language coverage, drop-in pickers</p>
+<ul>
+<li>Right-to-left languages now supported — Hebrew and Arabic/Persian/Urdu, including proper Arabic letter shaping and right-to-left layout.</li>
+<li>Bundled fonts for nearly every script: added Vietnamese/Turkish/Hausa, Russian, Hebrew, Arabic, Punjabi, Japanese, Korean, and Chinese (Simplified &amp; Traditional), on top of Thai and the Indian languages.</li>
+<li>A ready-made two-column language picker for AceGUI: each language shown both in the current language and in its own native name and script, sorted A-Z.</li>
+<li>Tab strips stay in the correct font automatically — including while you hover or select a tab — and never leak a font into another addon.</li>
+<li>Many reliability fixes for use as a shared library across lots of addons.</li>
+</ul>
+
 <p><strong>v0.1.0 (2026-06-12)</strong> — first release</p>
 <ul>
 <li>Per-addon, runtime language override: an addon offers its own language picker, switchable live with no <code>/reload</code>, and untranslated text falls back to English.</li>
@@ -33,6 +42,10 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 <li>Optional AceGUI dropdown that renders non-Latin languages in both the selected value and the open list.</li>
 <li>Reference consumer: FastGuildInvite.</li>
 </ul>
+
+<h2>Community</h2>
+
+<p>Bug reports, feature requests, or questions: <strong><a href="https://discord.com/invite/bY2R5TmBSz">Join the Discord</a></strong>.</p>
 
 <h2>License</h2>
 
