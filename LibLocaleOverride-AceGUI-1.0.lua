@@ -28,7 +28,7 @@ if not lib then return end
 -- NewLibrary guard of its own), so if an OLDER embedded copy loaded AFTER a newer one it
 -- would re-install stale functions/hooks. Bail when an equal-or-newer copy already ran;
 -- the newest always wins regardless of load order. Bump on every change to THIS file.
-local ACEGUI_MINOR = 1
+local ACEGUI_MINOR = 2
 if (lib._aceguiMinor or 0) >= ACEGUI_MINOR then return end
 lib._aceguiMinor = ACEGUI_MINOR
 
@@ -369,6 +369,31 @@ function lib:RegisterAceGUIDropdown(addon, opts)
 	return typeName
 end
 
+-- Cache of bundled-font Font OBJECTS that also carry a fixed text COLOUR, keyed by
+-- (path,size,flags,colour). AceGUI's tab look is driven entirely by per-state font
+-- objects, so to keep the gold(unselected) / white(selected) distinction with a bundled
+-- (Indic / CJK / Arabic) font we need colour-matched objects -- the shared core FontObject
+-- cache is colourless (defaults to white), which would force every tab to one colour.
+local tabFontCache, tabFontN = {}, 0
+local function coloredTabFont(path, size, flags, r, g, b)
+	if not path then return nil end
+	local key = path .. "|" .. tostring(size) .. "|" .. tostring(flags or "") .. "|" .. r .. "," .. g .. "," .. b
+	local o = tabFontCache[key]
+	if o == nil then
+		tabFontN = tabFontN + 1
+		local f = _G.CreateFont("LibLocaleOverrideTabFont" .. tabFontN)
+		f:SetFont(path, size or 12, flags or "")
+		if f:GetFont() then          -- verify via GetFont, NOT SetFont's unreliable boolean
+			f:SetTextColor(r, g, b)
+			o = f
+		else
+			o = false                -- font failed to load; caller falls back to stock objects
+		end
+		tabFontCache[key] = o
+	end
+	return o or nil
+end
+
 -- ONE applicator for an AceGUI TabGroup's tab-button fonts, used by both the apply path
 -- (bundled locale font) and the release path (restore AceGUI's stock fonts). A tab is a
 -- Button whose text font comes from its Normal/Highlight/Disabled font OBJECTS, not the
@@ -414,15 +439,26 @@ function lib:AttachTabGroupFont(addon, tg, opts)
 		-- Bundled font OBJECT for the active locale, sized to the base tab font. nil for a
 		-- Latin / client-native locale (its script renders in the stock font).
 		local path = libRef:GetFont(a)
-		local obj
+		local normalObj, selObj
 		if path then
 			local _, size, flags = tg._lloFontBase:GetFont()
-			obj = libRef:FontObject(path, size or 12, flags)
+			-- TWO colour-matched bundled objects, not one. AceGUI paints an unselected
+			-- (enabled) tab through its Normal object and the selected tab through its
+			-- Disabled object, which SelectTab forces to GameFontHighlightSmall (white);
+			-- the gold/white distinction lives entirely in those object colours. Collapsing
+			-- all states to a single colourless bundled object made a deselected tab stay
+			-- white, so mirror the stock Normal (gold) and Highlight (white) colours onto
+			-- the bundled font instead.
+			local nr, ng, nb = _G.GameFontNormalSmall:GetTextColor()
+			local wr, wg, wb = _G.GameFontHighlightSmall:GetTextColor()
+			normalObj = coloredTabFont(path, size or 12, flags, nr, ng, nb)
+			selObj    = coloredTabFont(path, size or 12, flags, wr, wg, wb)
 		end
-		if obj then
-			-- Same object for all three states + the fontstring, so hover (Highlight) and
-			-- select (Disabled) don't revert the tab to the glyph-less default object.
-			applyTabFonts(tg, obj, obj, obj, obj)
+		if normalObj and selObj then
+			-- Normal = gold (unselected/enabled), Highlight = white (hover), Disabled =
+			-- white (the selected/disabled tab), fontstring = gold for the immediate paint.
+			-- Re-applied after every SelectTab, so a deselected tab returns to gold.
+			applyTabFonts(tg, normalObj, selObj, selObj, normalObj)
 		else
 			-- No bundled font for the active locale (Latin) -- RESET to AceGUI's stock tab
 			-- fonts. Must NOT early-return: switching FROM a bundled locale (e.g. Bengali)

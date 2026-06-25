@@ -52,7 +52,7 @@ LibStub. License: MIT (see LICENSE).
 -- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
 -- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
 -- added after the initial MINOR=1).
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 3
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 10
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -272,6 +272,116 @@ function lib:ApplyFontToString(fs, addon, opts)
 	end
 end
 
+--- Apply the correct script font to a BUTTON across ALL of its visual states. A plain
+--- :SetFont / ApplyFontToString on the label is not enough for a templated button
+--- (UIPanelButtonTemplate, AceGUI buttons, etc.): the button swaps in a PER-STATE font
+--- OBJECT on hover / push / disable, so a non-Latin label reverts to the default
+--- glyph-less font and renders as boxes the moment the pointer touches it. This points
+--- the Normal / Highlight / Pushed / Disabled font objects at the bundled script font
+--- (a shared, fallback-safe cached object -- same machinery as ApplyFontToString), and
+--- restores the button's own stock font objects when the active locale needs no bundled
+--- font (Latin / Cyrillic / CJK). Reusable for any button in any consumer addon.
+---
+--- Resolves the script from the button's CURRENT label text, so call it AFTER setting
+--- the (already-localized) label. Stock per-state fonts are cached on the button the
+--- first time through, so the Latin-restore path is exact rather than guessed.
+function lib:ApplyFontToButton(addon, button)
+	if type(button) ~= "table" or type(button.GetNormalFontObject) ~= "function" then return end
+	if button.__lloOrigFonts == nil then            -- cache stock per-state fonts once
+		button.__lloOrigFonts = {
+			button:GetNormalFontObject(),
+			button.GetHighlightFontObject and button:GetHighlightFontObject() or false,
+			button.GetPushedFontObject   and button:GetPushedFontObject()   or false,
+			button.GetDisabledFontObject and button:GetDisabledFontObject() or false,
+		}
+	end
+	local fs   = button.GetFontString and button:GetFontString()
+	local text = (fs and fs.GetText and fs:GetText()) or (button.GetText and button:GetText()) or ""
+	local path = self:FontForText(addon, text)
+	if path then
+		local base = button.__lloOrigFonts[1] or button:GetNormalFontObject()
+		local _, size, flags
+		if base and base.GetFont then _, size, flags = base:GetFont() end
+		local obj = bundledObject(path, size or 12, flags)
+		if obj then
+			button:SetNormalFontObject(obj)
+			if button.SetHighlightFontObject then button:SetHighlightFontObject(obj) end
+			if button.SetPushedFontObject   then button:SetPushedFontObject(obj)   end
+			if button.SetDisabledFontObject then button:SetDisabledFontObject(obj) end
+		end
+	else
+		local o = button.__lloOrigFonts
+		if o[1] then button:SetNormalFontObject(o[1]) end
+		if o[2] and button.SetHighlightFontObject then button:SetHighlightFontObject(o[2]) end
+		if o[3] and button.SetPushedFontObject   then button:SetPushedFontObject(o[3]) end
+		if o[4] and button.SetDisabledFontObject then button:SetDisabledFontObject(o[4]) end
+	end
+	-- Auto-fit width (EVERY button -- no opt-in): grow the button when its now-fonted label
+	-- is wider than the width it was designed for, so a longer translation can't overflow,
+	-- and restore the design width for a shorter label. The original width is captured ONCE
+	-- as the floor, so this is idempotent and reverses cleanly on a locale switch. Crucially
+	-- it only acts when the text EXCEEDS the floor: a button whose label already fits -- a
+	-- square icon button with a short symbol, an English label that fits its box -- is left
+	-- exactly as-is. The button keeps its anchor, so a right-anchored action button just
+	-- extends leftward into its neighbour's slack. lloFitPad tunes the horizontal padding.
+	if fs and fs.GetStringWidth and button.SetWidth and button.GetWidth then
+		button.__lloFitFloor = button.__lloFitFloor or button:GetWidth() or 0
+		local w = fs:GetStringWidth() or 0
+		local target = (w > button.__lloFitFloor) and (w + (button.lloFitPad or 20)) or button.__lloFitFloor
+		if target > 0 and math.abs(target - button:GetWidth()) > 0.5 then
+			button:SetWidth(target)
+		end
+	end
+end
+
+-- Registered consumer dropdowns -> addon, and a one-time global hook guard.
+local ddFontAddon, ddFontHooked = {}, false
+
+--- Font the OPEN list of a Blizzard UIDropDownMenu (UIDropDownMenuTemplate) per the
+--- addon's script, so non-Latin menu items don't render as boxes. The dropdown's list
+--- lives in the SHARED global frames DropDownList1 / DropDownList2 (parented to UIParent,
+--- NOT the consumer's window), so a normal frame-walk never reaches it -- this is why a
+--- dropdown's collapsed/selected text fonts correctly but its open items don't.
+---
+--- Register each dropdown once. A single global hook on ToggleDropDownMenu (taint-safe
+--- hooksecurefunc) fonts the open list -- routing each visible item through
+--- ApplyFontToButton so it renders the script in EVERY state (normal + highlight), not
+--- just until the pointer touches it. Scoped through UIDROPDOWNMENU_OPEN_MENU so the hook
+--- only fonts the list when a REGISTERED dropdown is the one open: other addons' dropdowns
+--- (and their shared list buttons) are never touched. Reusable by any consumer addon.
+function lib:AttachDropDownFont(addon, dropdown)
+	if type(dropdown) ~= "table" then return end
+	ddFontAddon[dropdown] = addon
+	if ddFontHooked then return end
+	ddFontHooked = true
+	local function fontOpenLists()
+		local open = _G.UIDROPDOWNMENU_OPEN_MENU
+		local a = open and ddFontAddon[open]
+		if not a then return end                       -- not one of ours -> leave it alone
+		for lvl = 1, 2 do
+			local name = "DropDownList" .. lvl
+			local lf = _G[name]
+			if lf and lf.IsShown and lf:IsShown() then
+				local i = 1
+				while true do
+					local b = _G[name .. "Button" .. i]
+					if not b then break end
+					if b.IsShown and b:IsShown() then self:ApplyFontToButton(a, b) end
+					i = i + 1
+				end
+			end
+		end
+	end
+	if _G.hooksecurefunc and _G.ToggleDropDownMenu then
+		hooksecurefunc("ToggleDropDownMenu", fontOpenLists)
+	end
+	-- Backstop for submenus / re-shows that don't re-enter ToggleDropDownMenu.
+	for lvl = 1, 2 do
+		local lf = _G["DropDownList" .. lvl]
+		if lf and lf.HookScript then lf:HookScript("OnShow", fontOpenLists) end
+	end
+end
+
 -- ===========================================================================
 -- internals
 -- ===========================================================================
@@ -479,10 +589,20 @@ end
 --- script matches (the client's default font already renders the text).
 function lib:FontForText(addon, text)
 	if not text or text == "" then return nil end
+	-- The danda (U+0964 "।") and double danda (U+0965 "॥") are sentence punctuation
+	-- SHARED across Bengali / Gurmukhi / Devanagari and other North-Indic scripts, yet
+	-- Unicode files them in the Devanagari block. Strip them BEFORE script detection:
+	-- otherwise a Bengali (or Punjabi) line ending in "।" matches the Devanagari range
+	-- (checked before Bengali in scriptOrder) and the whole line gets the Devanagari
+	-- font — which has no Bengali glyphs, so every Bengali letter renders as a box.
+	-- Real Devanagari text keeps its own consonants/vowels and still matches Devanagari;
+	-- the danda itself renders fine from whichever Indic font is ultimately chosen.
+	local probe = text:gsub("\224\165[\164\165]", "")
+	if probe == "" then return nil end
 	local reg = self.registry[addon]
 	for _, name in ipairs(lib.scriptOrder) do
 		local s = lib.scripts[name]
-		if s and s.match(text) then
+		if s and s.match(probe) then
 			-- A per-addon RegisterFont override (keyed by locale) wins over built-in. Prefer
 			-- the ACTIVE locale's override (deterministic when several codes share a script,
 			-- e.g. arSA/urPK/faIR all Arabic); else any registered override for this script.
@@ -498,6 +618,53 @@ function lib:FontForText(addon, text)
 		end
 	end
 	return nil
+end
+
+--- Convert the WESTERN digits 0-9 in `text` to the addon's active-locale digits, driven
+--- by the locale table itself: L["0"]..L["9"]. The backend/data stays Western (%d, math);
+--- only the DISPLAY string is rewritten. MARKUP-AWARE — it never touches the characters
+--- inside WoW escapes, so colours/icons/links can't be corrupted: the 8 hex bytes of a
+--- colour code |cAARRGGBB, the body of a texture |T...|t, an atlas |A...|a, and the data
+--- portion of a hyperlink |H...|h are all skipped. Returns `text` unchanged when the
+--- active locale defines no digit override (Latin/Cyrillic/CJK locales — L["0"]=="0").
+function lib:LocalizeDigits(addon, text)
+	if type(text) ~= "string" or text == "" then return text end
+	local reg = self.registry[addon]
+	local L = reg and reg.active
+	if not L then return text end
+	local map, any = {}, false
+	for d = 0, 9 do
+		local k = tostring(d)
+		local v = L[k]
+		if v and v ~= k then any = true end
+		map[k] = (v ~= nil and v) or k
+	end
+	if not any then return text end                       -- locale has no native digits
+	local out, i, n = {}, 1, #text
+	while i <= n do
+		local two = text:sub(i, i + 1)
+		if two == "|c" then
+			out[#out + 1] = text:sub(i, i + 9)            -- |c + 8 hex colour bytes
+			i = i + 10
+		elseif two == "|T" then
+			local e = text:find("|t", i + 2, true)
+			if e then out[#out + 1] = text:sub(i, e + 1); i = e + 2
+			else out[#out + 1] = two; i = i + 2 end
+		elseif two == "|A" then
+			local e = text:find("|a", i + 2, true)
+			if e then out[#out + 1] = text:sub(i, e + 1); i = e + 2
+			else out[#out + 1] = two; i = i + 2 end
+		elseif two == "|H" then
+			local e = text:find("|h", i + 2, true)        -- skip the link DATA (ids/numbers)
+			if e then out[#out + 1] = text:sub(i, e + 1); i = e + 2
+			else out[#out + 1] = two; i = i + 2 end
+		else
+			local c = text:sub(i, i)
+			out[#out + 1] = map[c] or c
+			i = i + 1
+		end
+	end
+	return table.concat(out)
 end
 
 -- Recursively re-font every FontString under a frame (regions + children) by each
@@ -518,6 +685,15 @@ local function walkFonts(self, addon, frame, depth)
 	end
 	if frame.GetChildren then
 		for _, child in ipairs({ frame:GetChildren() }) do
+			-- A templated button (UIPanelButtonTemplate, etc.) renders its label through
+			-- per-state font OBJECTS, so a plain FontString re-font can't stop it boxing the
+			-- moment it's hovered/pushed. Font those states too -- this makes EVERY button
+			-- under a walked frame correct automatically, with no per-button call sites.
+			-- ApplyFontToButton is a no-op for a textless (icon) button.
+			if child.GetObjectType and child:GetObjectType() == "Button"
+			   and child.GetNormalFontObject then
+				self:ApplyFontToButton(addon, child)
+			end
 			walkFonts(self, addon, child, depth + 1)
 		end
 	end

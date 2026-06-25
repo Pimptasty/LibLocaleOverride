@@ -26,6 +26,17 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 
 <h2>Recent Updates</h2>
 
+<p><strong>v0.3.0 (2026-06-25)</strong> — native numbers, buttons &amp; dropdowns, no more boxed Latin</p>
+<ul>
+<li>Numbers can display in a language's own digits (Bengali ০-৯, Hindi, Arabic, and more) — and it leaves colour codes, icons and links untouched.</li>
+<li>Buttons now font correctly in every state (including while hovered) and automatically grow to fit a longer translated word, so labels never overflow or turn into boxes.</li>
+<li>The open list of a native Blizzard dropdown menu now fonts correctly for the chosen language — previously only the selected value did.</li>
+<li>Fonting a whole window now covers its buttons automatically, in one call.</li>
+<li>Tab strips keep their selected/unselected colours correctly even when using a bundled font.</li>
+<li>Fixed Bengali and Punjabi text being mistaken for Hindi (a shared punctuation mark) and rendering as boxes.</li>
+<li>Bundled fonts now include the Latin alphabet, so English names, slash-commands or brands sitting inside translated text show up instead of empty boxes.</li>
+</ul>
+
 <p><strong>v0.2.0 (2026-06-14)</strong> — right-to-left, full language coverage, drop-in pickers</p>
 <ul>
 <li>Right-to-left languages now supported — Hebrew and Arabic/Persian/Urdu, including proper Arabic letter shaping and right-to-left layout.</li>

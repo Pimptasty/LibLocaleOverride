@@ -6,11 +6,12 @@ addons, plus a **bundled-font manager** for scripts the WoW client can't render
 
 ## Status
 
-**v0.2.0** — runtime per-addon language override; a script-aware bundled-font
-manager covering most of the world's scripts; right-to-left support (Hebrew +
-Arabic / Persian / Urdu, with Arabic contextual shaping); and optional AceGUI
-integration — a two-column language picker and an automatic tab-font handler.
-First consumer: **FastGuildInvite**.
+**v0.3.0** — runtime per-addon language override; a script-aware bundled-font
+manager covering most of the world's scripts (now with Latin merged in, so embedded
+brand/command text never boxes); **locale-native numerals**; full **button** and
+**native-dropdown** fonting; right-to-left support (Hebrew + Arabic / Persian / Urdu,
+with Arabic contextual shaping); and optional AceGUI integration — a two-column language
+picker and an automatic tab-font handler. First consumer: **FastGuildInvite**.
 
 ## Why not AceLocale-3.0 / AddonLocale?
 
@@ -45,7 +46,10 @@ LLO:UnregisterAddon(addon)                        -- forget everything for an ad
 LLO:GetFont(addon)                                -- bundled font path for the active locale
 LLO:FontForText(addon, text)                      -- font for a string by its own script
 LLO:ApplyFontToString(fs, addon, opts)            -- the single font applicator
-LLO:ApplyFontToFrame(addon, frame)                -- re-font a frame's strings by script
+LLO:ApplyFontToFrame(addon, frame)                -- re-font a frame's strings + buttons by script
+LLO:ApplyFontToButton(addon, button)              -- font a button across all states (+ auto-fit width)
+LLO:AttachDropDownFont(addon, dropdown)           -- font a Blizzard UIDropDownMenu's open list
+LLO:LocalizeDigits(addon, text)                   -- Western digits -> the locale's own (markup-aware)
 LLO:RegisterFont(addon, code, fontPath)           -- per-addon bundled-font override
 LLO:RegisterManagedFontString(addon, fsOrFn)      -- auto-refont on switch; UnregisterManagedFontString to drop
 

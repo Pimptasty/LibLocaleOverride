@@ -1,5 +1,80 @@
 # Lib: LocaleOverride
 
+## [v0.3.0] (2026-06-25) — native numerals, button + dropdown fonting, Latin-in-bundled-fonts
+
+A localisation-completeness release: the pieces a fully-translated UI needs beyond
+strings — locale-native numbers, buttons and native dropdowns that font (and fit)
+correctly, and embedded Latin that no longer boxes. Driven by a deep Bengali pass on
+the reference consumer. LibStub `MINOR` 3 → 10; AceGUI satellite `_aceguiMinor` 1 → 2.
+
+### Native numerals — new `lib:LocalizeDigits(addon, text)`
+
+- Converts the Western digits 0-9 in a DISPLAY string to the active locale's own
+  digits, driven by the locale table itself (`L["0"]`..`L["9"]`). The backend/data
+  stays Western (math, `%d`, comparisons) — only the rendered string is rewritten.
+- **Markup-aware**: never touches the characters inside WoW escapes — the 8 hex bytes
+  of a colour code `|cAARRGGBB`, the body of a texture `|T...|t`, an atlas `|A...|a`,
+  or the data portion of a hyperlink `|H...|h` — so colours, icons and links can't be
+  corrupted. Returns the string unchanged for locales with no native digits.
+
+### Button fonting — new `lib:ApplyFontToButton(addon, button)`
+
+- Fonts a templated button (UIPanelButtonTemplate, AceGUI, etc.) across **every**
+  visual state — Normal / Highlight / Pushed / Disabled. A plain fontstring re-font
+  can't survive a state change: the button swaps in a per-state font OBJECT on
+  hover/push, so a non-Latin label reverts to the glyph-less default and boxes the
+  moment the pointer touches it. The button's stock per-state fonts are cached once so
+  a Latin locale restores them exactly.
+- **Auto-fit width** (built in, no opt-in): grows the button when its now-fonted label
+  is wider than the width it was designed for — so a longer translation can't overflow
+  — and restores the design width for a shorter one. The original width is captured as
+  a floor and it only acts when the text actually exceeds it, so square icon buttons
+  and already-fitting labels are left exactly as-is. `lloFitPad` tunes the padding.
+
+### Frame walk now fonts buttons — `lib:ApplyFontToFrame`
+
+- The recursive font walk applies `ApplyFontToButton` to every Button child it
+  encounters, so a single `ApplyFontToFrame` fonts **every** button under a frame (all
+  states, plus the width auto-fit) automatically — no per-button call sites. A textless
+  (icon) button is a no-op.
+
+### Dropdown list fonting — new `lib:AttachDropDownFont(addon, dropdown)`
+
+- Fonts the OPEN list of a Blizzard `UIDropDownMenu`. The list lives in the SHARED
+  global `DropDownList1` / `DropDownList2` frames (parented to UIParent, not the
+  consumer's window), so a normal frame walk never reaches it — which is why a
+  dropdown's collapsed/selected text fonted but its open items boxed.
+- Register each dropdown once; a single global hook on `ToggleDropDownMenu`
+  (taint-safe `hooksecurefunc`) fonts the open list — routing each item through
+  `ApplyFontToButton` so it renders in every state. Scoped via
+  `UIDROPDOWNMENU_OPEN_MENU` so the hook only fonts a list when a REGISTERED dropdown
+  is the one open; other addons' dropdowns (and the shared list buttons) are untouched.
+
+### Script-detection fix — `FontForText` (the danda)
+
+- Strip the danda (U+0964 "।") and double danda (U+0965 "॥") BEFORE script detection.
+  They're sentence punctuation SHARED across Bengali / Gurmukhi / Devanagari and other
+  North-Indic scripts, yet Unicode files them in the Devanagari block — so a Bengali or
+  Punjabi line ending in "।" matched Devanagari (checked first in `scriptOrder`) and
+  rendered in the Devanagari font, which has no Bengali glyphs → every letter boxed.
+
+### Bundled fonts now carry Latin
+
+- Merged the Latin range into the seven non-Latin script fonts (Bengali, Devanagari,
+  Arabic, Gurmukhi, Hebrew, Tamil, Telugu). Without it, English brand names,
+  slash-commands and any other embedded Latin inside a translated string rendered as
+  boxes — the script-only subsets had no Latin glyphs. Each font keeps its own OFL.
+
+### AceGUI tab colours (`LibLocaleOverride-AceGUI-1.0.lua`, `_aceguiMinor` 1 → 2)
+
+- Tabs fonted with a bundled (Indic / CJK / Arabic) font kept the **gold** (unselected)
+  / **white** (selected) distinction. AceGUI drives that entirely through the per-state
+  font OBJECTS — an enabled tab paints in its Normal object (gold), the selected tab is
+  disabled with its Disabled object forced to `GameFontHighlightSmall` (white).
+  Collapsing all states to one colourless bundled object made a deselected tab stay
+  white; now two colour-matched bundled objects (gold + white) are applied and
+  re-asserted after every `SelectTab`.
+
 ## [v0.2.0] (2026-06-14) — RTL, full script coverage, AceGUI picker + tab handler, hardening
 
 A large feature release: everything from v0.1.0 plus right-to-left support, the
