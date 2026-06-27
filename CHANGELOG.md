@@ -1,5 +1,43 @@
 # Lib: LocaleOverride
 
+## [v0.3.1] (2026-06-27) — non-Latin width measurement: buttons and tabs size to the painted width
+
+v0.3.0 introduced button auto-fit and tab fonting; this corrects how their WIDTH is
+measured for complex scripts. WoW does no shaping, so `GetStringWidth` on a bundled-font
+string collapses the matra/mark advances and reports far less than the width the client
+actually paints — which left non-Latin button labels overflowing and the AceGUI tab strip
+spilling past the window edge. LibStub `MINOR` 10 → 12; AceGUI satellite `_aceguiMinor`
+2 → 4.
+
+### Button auto-fit measures the base font too — `lib:ApplyFontToButton`
+
+- The label width is now measured in the button's BASE (client) font as well as the
+  bundled font, and the button is sized to the LARGER of the two. The base font advances
+  every codepoint — a close proxy for the no-shaping painted width — whereas the bundled
+  font's `GetStringWidth` under-reports it (often by ~half), so the button grew too narrow
+  and the label overflowed. A Latin label measures the same in both fonts, so Latin buttons
+  are never inflated. Measurement uses a dedicated UIParent-parented fontstring (font set
+  before text, so the width is correct synchronously) and the fit is re-asserted on the
+  next frame once the button's own label has been realized.
+
+### Bare `.label` buttons now auto-fit — `lib:ApplyFontToButton`
+
+- Recognises the common consumer pattern of a bare `CreateFrame("Button")` with a separate
+  child `.label` fontstring and no `GetFontString()`: that label is used for the text, the
+  font, and the width measurement, so those buttons grow to fit a translated label instead
+  of letting it overflow. The base-font proxy falls back to the label's own font object,
+  then `GameFontNormal`, when the button has no Normal font object of its own.
+
+### Tab strip measured in the base font — `lib:AttachTabGroupFont` (`_aceguiMinor` 2 → 4)
+
+- AceGUI sizes each tab and assigns it to a row from `GetFontString():GetStringWidth()`
+  during `BuildTabs`. Measured in the bundled font it under-reported, so AceGUI over-packed
+  the first row and the justified tabs overflowed the window. The tabs are now forced into
+  the base font for the DURATION of AceGUI's measurement (it advances every codepoint, a
+  close proxy for the painted width), then swapped back to the bundled font for display
+  once the widths and rows are set — on every build (initial, AceGUI's own next-frame
+  re-layout, and `SetTabs`). This supersedes v0.3.0's deferred-relayout approach.
+
 ## [v0.3.0] (2026-06-25) — native numerals, button + dropdown fonting, Latin-in-bundled-fonts
 
 A localisation-completeness release: the pieces a fully-translated UI needs beyond

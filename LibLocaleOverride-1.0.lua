@@ -52,7 +52,7 @@ LibStub. License: MIT (see LICENSE).
 -- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
 -- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
 -- added after the initial MINOR=1).
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 10
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 12
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -285,6 +285,26 @@ end
 --- Resolves the script from the button's CURRENT label text, so call it AFTER setting
 --- the (already-localized) label. Stock per-state fonts are cached on the button the
 --- first time through, so the Latin-restore path is exact rather than guessed.
+-- A dedicated hidden fontstring used only to measure label width. Measuring the button's
+-- OWN fontstring right after swapping its font object is unreliable -- the string's metrics
+-- do not always refresh in the same frame, so a non-Latin label was measured in the old
+-- (boxy default) font and the button grew to the wrong, too-narrow width. Here we set the
+-- bundled font object FIRST and the text SECOND, so GetStringWidth is correct synchronously.
+local measureFS
+local function measuredWidth(obj, text)
+	if not obj or not text or text == "" then return 0 end
+	if not measureFS then
+		-- Parented to UIParent (not a hidden frame): GetStringWidth can report 0 for a
+		-- string on a frame that has never been drawn. It stays invisible because it is
+		-- never anchored/sized.
+		local f = CreateFrame("Frame", nil, UIParent)
+		measureFS = f:CreateFontString(nil, "ARTWORK")
+	end
+	measureFS:SetFontObject(obj)
+	measureFS:SetText(text)
+	return measureFS:GetStringWidth() or 0
+end
+
 function lib:ApplyFontToButton(addon, button)
 	if type(button) ~= "table" or type(button.GetNormalFontObject) ~= "function" then return end
 	if button.__lloOrigFonts == nil then            -- cache stock per-state fonts once
@@ -295,19 +315,35 @@ function lib:ApplyFontToButton(addon, button)
 			button.GetDisabledFontObject and button:GetDisabledFontObject() or false,
 		}
 	end
-	local fs   = button.GetFontString and button:GetFontString()
+	local fs = button.GetFontString and button:GetFontString()
+	-- Common consumer pattern: a bare CreateFrame button with a separate child `.label`
+	-- fontstring (not the button's own GetFontString, which is nil here). Use that label for
+	-- the text, the font, and the width measurement, so these buttons auto-fit too.
+	if not fs and type(button.label) == "table" and button.label.GetStringWidth then
+		fs = button.label
+	end
 	local text = (fs and fs.GetText and fs:GetText()) or (button.GetText and button:GetText()) or ""
 	local path = self:FontForText(addon, text)
+	-- Base (client) font for the no-shaping width proxy. A bare button has no Normal font
+	-- object, so fall back to the label's own font object, then to GameFontNormal.
+	local baseObj = button.__lloOrigFonts[1]
+		or (button.GetNormalFontObject and button:GetNormalFontObject())
+		or (fs and fs.GetFontObject and fs:GetFontObject())
+		or _G.GameFontNormal
+	local obj
 	if path then
-		local base = button.__lloOrigFonts[1] or button:GetNormalFontObject()
 		local _, size, flags
-		if base and base.GetFont then _, size, flags = base:GetFont() end
-		local obj = bundledObject(path, size or 12, flags)
+		if baseObj and baseObj.GetFont then _, size, flags = baseObj:GetFont() end
+		obj = bundledObject(path, size or 12, flags)
 		if obj then
 			button:SetNormalFontObject(obj)
 			if button.SetHighlightFontObject then button:SetHighlightFontObject(obj) end
 			if button.SetPushedFontObject   then button:SetPushedFontObject(obj)   end
 			if button.SetDisabledFontObject then button:SetDisabledFontObject(obj) end
+			-- Also set the fontstring's object directly, so the width measured below reflects
+			-- the bundled font in THIS frame (the per-state objects may not update the
+			-- string's metrics synchronously, which left the auto-fit measuring the old font).
+			if fs and fs.SetFontObject then fs:SetFontObject(obj) end
 		end
 	else
 		local o = button.__lloOrigFonts
@@ -324,12 +360,30 @@ function lib:ApplyFontToButton(addon, button)
 	-- square icon button with a short symbol, an English label that fits its box -- is left
 	-- exactly as-is. The button keeps its anchor, so a right-anchored action button just
 	-- extends leftward into its neighbour's slack. lloFitPad tunes the horizontal padding.
-	if fs and fs.GetStringWidth and button.SetWidth and button.GetWidth then
+	if button.SetWidth and button.GetWidth then
 		button.__lloFitFloor = button.__lloFitFloor or button:GetWidth() or 0
-		local w = fs:GetStringWidth() or 0
-		local target = (w > button.__lloFitFloor) and (w + (button.lloFitPad or 20)) or button.__lloFitFloor
-		if target > 0 and math.abs(target - button:GetWidth()) > 0.5 then
-			button:SetWidth(target)
+		local floor, pad = button.__lloFitFloor, (button.lloFitPad or 26)
+		local function fit(w)
+			w = w or 0
+			local target = (w > floor) and (w + pad) or floor
+			if target > 0 and math.abs(target - button:GetWidth()) > 0.5 then
+				button:SetWidth(target)
+			end
+		end
+		-- WoW does not shape complex scripts. For Indic / Arabic the bundled font's matra and
+		-- mark advances collapse under GetStringWidth, so it reports far LESS than the width the
+		-- client actually paints. Measuring the SAME text in the button's BASE (client) font --
+		-- which advances every codepoint -- is a much closer proxy for the painted width, so
+		-- take the larger of the two. (A Latin label measures the same in both, so this never
+		-- inflates Latin buttons.)
+		local mW = obj and measuredWidth(obj, text) or 0
+		local bW = (obj and baseObj) and measuredWidth(baseObj, text) or 0
+		local w  = math.max(mW, bW)
+		fit(w ~= 0 and w or (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0)
+		-- Re-assert on the next frame, after the strip's layout settles, using the same
+		-- (better) estimate rather than the under-reporting realized string.
+		if C_Timer and C_Timer.After then
+			C_Timer.After(0, function() fit(w) end)
 		end
 	end
 end

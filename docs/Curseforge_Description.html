@@ -26,6 +26,13 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 
 <h2>Recent Updates</h2>
 
+<p><strong>v0.3.1 (2026-06-27)</strong> — non-Latin buttons &amp; tabs size to the width they're drawn at</p>
+<ul>
+<li>Buttons now grow to the width a translated label is actually painted at. For scripts like Tamil, Hindi or Thai the game reports a much smaller width than it draws, so labels were overflowing their buttons; the width is now measured against the client font and the button fits the real label.</li>
+<li>This also covers plain text buttons that use a separate label, so those size to their translation too.</li>
+<li>Tab strips no longer run off the edge of the window in a non-Latin language — the tabs are measured at their true painted width, so the row wraps neatly inside the window instead of overflowing.</li>
+</ul>
+
 <p><strong>v0.3.0 (2026-06-25)</strong> — native numbers, buttons &amp; dropdowns, no more boxed Latin</p>
 <ul>
 <li>Numbers can display in a language's own digits (Bengali ০-৯, Hindi, Arabic, and more) — and it leaves colour codes, icons and links untouched.</li>

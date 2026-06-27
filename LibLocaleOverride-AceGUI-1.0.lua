@@ -28,7 +28,7 @@ if not lib then return end
 -- NewLibrary guard of its own), so if an OLDER embedded copy loaded AFTER a newer one it
 -- would re-install stale functions/hooks. Bail when an equal-or-newer copy already ran;
 -- the newest always wins regardless of load order. Bump on every change to THIS file.
-local ACEGUI_MINOR = 2
+local ACEGUI_MINOR = 4
 if (lib._aceguiMinor or 0) >= ACEGUI_MINOR then return end
 lib._aceguiMinor = ACEGUI_MINOR
 
@@ -467,12 +467,31 @@ function lib:AttachTabGroupFont(addon, tg, opts)
 			applyTabFonts(tg, _G.GameFontNormalSmall, _G.GameFontHighlightSmall, _G.GameFontHighlightSmall, _G.GameFontNormalSmall)
 		end
 	end
+	-- AceGUI sizes each tab and assigns it to a row from GetFontString():GetStringWidth(),
+	-- measured during BuildTabs. WoW does NOT shape complex scripts, so the bundled font's
+	-- matra/mark advances collapse under GetStringWidth -- it reports far less than the width
+	-- the client actually paints. If AceGUI measures the tabs while they carry the bundled
+	-- font it sizes them too narrow, over-packs the first row, and the painted (wider) labels
+	-- spill past the window edge. So for a bundled-font locale we force the tabs into the BASE
+	-- (client) font for the DURATION of AceGUI's measurement -- the base font advances every
+	-- codepoint, a close proxy for the painted bundled width -- then swap to the bundled font
+	-- for display once the widths and rows are set. This runs for EVERY build (the initial one,
+	-- AceGUI's own next-frame OnUpdate re-layout, and SetTabs), so the rows are always packed
+	-- to a width close to what gets painted.
 	if not tg._lloFontHooked then
 		tg._lloFontHooked = true
 		for _, m in ipairs({ "BuildTabs", "SetTabs" }) do
 			local orig = tg[m]
 			if type(orig) == "function" then
-				tg[m] = function(w, ...) local r = orig(w, ...); refont(); return r end
+				tg[m] = function(w, ...)
+					if libRef:GetFont(tg._lloFontAddon) then
+						applyTabFonts(tg, _G.GameFontNormalSmall, _G.GameFontHighlightSmall,
+							_G.GameFontHighlightSmall, _G.GameFontNormalSmall)
+					end
+					local r = orig(w, ...)
+					refont()
+					return r
+				end
 			end
 		end
 		-- SelectTab re-sets the selected tab's Disabled font object to GameFontHighlightSmall
