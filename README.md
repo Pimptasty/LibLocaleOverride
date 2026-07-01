@@ -6,10 +6,12 @@ addons, plus a **bundled-font manager** for scripts the WoW client can't render
 
 ## Status
 
-**v0.3.0** — runtime per-addon language override; a script-aware bundled-font
+**v0.3.1** — runtime per-addon language override; a script-aware bundled-font
 manager covering most of the world's scripts (now with Latin merged in, so embedded
 brand/command text never boxes); **locale-native numerals**; full **button** and
-**native-dropdown** fonting; right-to-left support (Hebrew + Arabic / Persian / Urdu,
+**native-dropdown** fonting that sizes to the width a non-Latin label is actually painted
+at; a **client-locale resolver** (`GetClientLocale`) for chat/print output in a
+chat-renderable language; right-to-left support (Hebrew + Arabic / Persian / Urdu,
 with Arabic contextual shaping); and optional AceGUI integration — a two-column language
 picker and an automatic tab-font handler. First consumer: **FastGuildInvite**.
 

@@ -27,8 +27,8 @@ USAGE (consumer side):
     -- in Settings, on change:  LLO:SetOverride("MyAddon", code)  ("auto" or a code)
 
 API INDEX (all keyed by your addon name unless noted):
-  locale   RegisterLocale, SetStore, ApplyStored, SetOverride, GetLocale, GetActiveCode,
-           GetOverride, GetAvailable, HasLocale, UnregisterAddon
+  locale   RegisterLocale, SetStore, ApplyStored, SetOverride, GetLocale, GetClientLocale,
+           GetActiveCode, GetOverride, GetAvailable, HasLocale, UnregisterAddon
   font     GetFont, FontForText, FontObject, ApplyFontToString, ApplyFontToFrame,
            RegisterFont, RegisterManagedFontString, UnregisterManagedFontString
   events   RegisterCallback, UnregisterCallback
@@ -52,7 +52,7 @@ LibStub. License: MIT (see LICENSE).
 -- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
 -- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
 -- added after the initial MINOR=1).
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 12
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 13
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -62,10 +62,12 @@ if not lib then return end   -- an equal or newer copy is already loaded
 -- registry[addon] = {
 --   locales   = { [code] = stringTable },  -- ALL registered tables, never discarded
 --   default   = code,                       -- baseline for key fallback (default "enUS")
---   active    = mergedTable,                -- the live table GetLocale() returns
+--   active    = mergedTable,                -- the live table GetLocale() returns (honors override)
 --   override  = "auto" | code,              -- the user's choice (what SetOverride sets)
 --   code      = resolvedActiveCode,         -- override resolved to a real locale
 --   built     = bool,                       -- has active been merged at least once
+--   clientActive = mergedTable,             -- baseline + CLIENT locale, IGNORES override (chat/print)
+--   clientBuilt  = bool,                     -- has clientActive been merged at least once
 --   getStore  = function() return savedCode end,
 --   setStore  = function(savedCode) end,
 --   fonts     = { [code] = "Interface\\AddOns\\<addon>\\fonts\\X.ttf" },
@@ -529,6 +531,32 @@ local function rebuild(self, addon)
 	fireCallbacks(self, addon)
 end
 
+-- Rebuild reg.clientActive = baseline + the CLIENT locale (GetLocale()) on top,
+-- IGNORING the override. Chat / print output must read from this, not `active`:
+-- the override can select a language WoW doesn't ship (Bengali, Dutch, Filipino...)
+-- whose glyphs the shared chat font can't render -- and we cannot re-font Blizzard's
+-- chat frame for one addon without bleeding our font into every addon's chat. The
+-- client locale is always a WoW-supported, chat-renderable script (or the enUS
+-- baseline), so it renders correctly in the default chat frame. Built in place like
+-- `active` so a captured reference stays valid. GetLocale() is fixed for the session,
+-- so this only needs rebuilding when a locale table registers late.
+local function rebuildClient(self, addon)
+	local reg = self.registry[addon]
+	if not reg then return end
+	local baseCode = reg.default or "enUS"
+	local base     = reg.locales[baseCode] or {}
+	local code     = GetLocale()
+	if not reg.locales[code] then code = baseCode end
+	local target   = reg.locales[code] or base
+	local active   = reg.clientActive
+	for k in pairs(active) do active[k] = nil end
+	for k, v in pairs(base) do active[k] = v end
+	if target ~= base then
+		for k, v in pairs(target) do active[k] = v end
+	end
+	reg.clientBuilt = true
+end
+
 -- ===========================================================================
 -- public API
 -- ===========================================================================
@@ -545,6 +573,7 @@ function lib:RegisterLocale(addon, code, tbl, isDefault)
 	reg.locales[code] = tbl
 	if isDefault then reg.default = code end      -- else rebuild() falls back to "enUS"
 	if reg.built then rebuild(self, addon) end    -- fold a late registration in
+	if reg.clientBuilt then rebuildClient(self, addon) end  -- ...and into the client table
 	return tbl
 end
 
@@ -587,6 +616,19 @@ function lib:GetLocale(addon)
 	local reg = ensureReg(self, addon)
 	if not reg.built then rebuild(self, addon) end
 	return reg.active
+end
+
+--- The CLIENT-locale merged table (enUS baseline + GetLocale() on top), which
+--- IGNORES the override. Use this for anything printed to the default chat frame:
+--- the override may pick a language WoW can't render in chat (boxes), whereas the
+--- client locale always renders. The SAME table object is reused, so capturing it
+--- once is fine -- but read L[key] at print time. Falls back to enUS when the client
+--- locale has no registered table.
+function lib:GetClientLocale(addon)
+	local reg = ensureReg(self, addon)
+	if not reg.clientActive then reg.clientActive = {} end
+	if not reg.clientBuilt then rebuildClient(self, addon) end
+	return reg.clientActive
 end
 
 --- The resolved active locale code (never "auto"; "auto" resolves to the client).

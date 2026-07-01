@@ -1,13 +1,14 @@
 # Lib: LocaleOverride
 
-## [v0.3.1] (2026-06-27) — non-Latin width measurement: buttons and tabs size to the painted width
+## [v0.3.1] (2026-07-01) — non-Latin width measurement + `GetClientLocale` for chat output
 
 v0.3.0 introduced button auto-fit and tab fonting; this corrects how their WIDTH is
-measured for complex scripts. WoW does no shaping, so `GetStringWidth` on a bundled-font
-string collapses the matra/mark advances and reports far less than the width the client
-actually paints — which left non-Latin button labels overflowing and the AceGUI tab strip
-spilling past the window edge. LibStub `MINOR` 10 → 12; AceGUI satellite `_aceguiMinor`
-2 → 4.
+measured for complex scripts, and adds `GetClientLocale` so consumers can print to the
+chat frame in a renderable language. WoW does no shaping, so `GetStringWidth` on a
+bundled-font string collapses the matra/mark advances and reports far less than the width
+the client actually paints — which left non-Latin button labels overflowing and the AceGUI
+tab strip spilling past the window edge. LibStub `MINOR` 10 → 13; AceGUI satellite
+`_aceguiMinor` 2 → 4.
 
 ### Button auto-fit measures the base font too — `lib:ApplyFontToButton`
 
@@ -37,6 +38,18 @@ spilling past the window edge. LibStub `MINOR` 10 → 12; AceGUI satellite `_ace
   close proxy for the painted width), then swapped back to the bundled font for display
   once the widths and rows are set — on every build (initial, AceGUI's own next-frame
   re-layout, and `SetTabs`). This supersedes v0.3.0's deferred-relayout approach.
+
+### Client-locale table for chat/print output — `lib:GetClientLocale` (`MINOR` → 13)
+
+- New `lib:GetClientLocale(addon)` returns a merged table (enUS baseline + the WoW **client**
+  locale from `GetLocale()` on top) that **ignores the UI-language override**. It's the resolver
+  for anything printed to the default chat frame: the override can select a language WoW doesn't
+  ship (Bengali, Dutch, Filipino…) whose glyphs the shared chat font can't render — and a library
+  can't re-font Blizzard's chat frame for one addon without bleeding its font into every addon's
+  chat. `GetLocale()` is always a WoW-supported, chat-renderable script (or the enUS baseline),
+  so chat lines render correctly while the override keeps driving the in-addon UI (where the
+  library controls the font). Built in place like `active`, re-folds late `RegisterLocale` calls,
+  and falls back to enUS when the client locale has no registered table.
 
 ## [v0.3.0] (2026-06-25) — native numerals, button + dropdown fonting, Latin-in-bundled-fonts
 
