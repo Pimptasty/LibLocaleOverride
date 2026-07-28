@@ -52,7 +52,7 @@ LibStub. License: MIT (see LICENSE).
 -- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
 -- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
 -- added after the initial MINOR=1).
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 13
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 14
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)

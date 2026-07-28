@@ -1,5 +1,23 @@
 # Lib: LocaleOverride
 
+## [v0.3.2] (2026-07-28) — Classic Era / BCC / MoP interface bumps
+
+Client-compatibility release. No API or behavior change.
+
+### TOC interface versions
+
+- The single multi-version `## Interface:` line is re-targeted at the current live builds:
+  Classic Era `11508` → `11509` (1.15.9), BCC/Anniversary `20505` → `20506` (2.5.6), and
+  MoP Classic `50503` → `50504` (5.5.4). The library no longer reports as out-of-date on
+  any of those clients.
+- Verified against the installed client builds in `.build.info`, not assumed from patch
+  notes. Retail stays at `120007` — 12.0.7 is still current, there is no 12.0.8. The Wrath
+  (`30403`) and Cata (`40400`) entries are for retired clients and are left as-is, as is the
+  legacy retail `110207` / `120005` pair.
+- LibStub `MINOR` 13 → 14 so a consumer shipping this copy still wins the load race against
+  an embedded v0.3.1 copy. The Lua is otherwise byte-identical to v0.3.1; the satellite
+  files (`_aceguiMinor` 4, `_rtlMinor` 1, `_namesMinor` 1) are unchanged.
+
 ## [v0.3.1] (2026-07-01) — non-Latin width measurement + `GetClientLocale` for chat output
 
 v0.3.0 introduced button auto-fit and tab fonting; this corrects how their WIDTH is

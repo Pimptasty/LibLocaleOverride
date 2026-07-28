@@ -6,7 +6,7 @@ addons, plus a **bundled-font manager** for scripts the WoW client can't render
 
 ## Status
 
-**v0.3.1** — runtime per-addon language override; a script-aware bundled-font
+**v0.3.2** — runtime per-addon language override; a script-aware bundled-font
 manager covering most of the world's scripts (now with Latin merged in, so embedded
 brand/command text never boxes); **locale-native numerals**; full **button** and
 **native-dropdown** fonting that sizes to the width a non-Latin label is actually painted

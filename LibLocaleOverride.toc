@@ -1,4 +1,4 @@
-## Interface: 11508, 20505, 30403, 40400, 50503, 110207, 120005, 120007
+## Interface: 11509, 20506, 30403, 40400, 50504, 110207, 120005, 120007
 ## Title: |cffFF8000Lib: LocaleOverride|r
 ## Notes: Per-addon, runtime-switchable UI language override + bundled-font manager. Lets a player pick an addon's interface language independently of the WoW client — including locales WoW doesn't ship. Embeddable via LibStub.
 ## Author: Pimptasty
