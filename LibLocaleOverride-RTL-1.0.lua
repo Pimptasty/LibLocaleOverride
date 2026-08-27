@@ -25,7 +25,7 @@ if not lib then return end
 
 -- Satellite version stamp (no NewLibrary guard of its own); newest copy wins regardless of
 -- load order. Bump on every change to THIS file.
-local RTL_MINOR = 1
+local RTL_MINOR = 2
 if (lib._rtlMinor or 0) >= RTL_MINOR then return end
 lib._rtlMinor = RTL_MINOR
 
@@ -228,11 +228,25 @@ local LAM_ALEF = {
 	["\216\165"] = { a = "\239\187\185", b = "\239\187\186" }, -- + ALEF HAMZA BELOW
 }
 
--- A letter joins to the FOLLOWING letter (is dual-joining) iff it has distinct
--- initial and medial forms -- right-joining letters (ALEF, DAL, REH, WAW...),
--- HAMZA and TEH MARBUTA do not, so this classifies them correctly too.
-local function dualJoining(rule)
-	return rule ~= nil and rule.ini ~= rule.iso and rule.mid ~= rule.fin
+-- Letters whose Unicode joining type is D but for which Unicode encodes NO initial
+-- and no medial presentation form, so the shape of AR_FORMS cannot reveal it.
+-- Source: ArabicShaping.txt (`06BA; DOTLESS NOON; D; NOON`). Checked against that
+-- file for all 76 rows: this is the complete set, not a sample.
+local FORCE_DUAL = {
+	["\218\186"] = true,  -- U+06BA NOON GHUNNA -- only U+FB9E iso and U+FB9F fin exist
+}
+
+-- Does a letter join to the FOLLOWING letter? Having distinct initial and medial
+-- forms is a PROXY for that, not the property itself: it answers "did Unicode
+-- encode four distinct legacy compatibility glyphs", which is an encoding fact,
+-- while joining is a linguistic one. They agree for 75 of the 76 rows -- right-
+-- joining letters (ALEF, DAL, REH, WAW...), HAMZA and TEH MARBUTA all fall out
+-- correctly -- and FORCE_DUAL carries the one row where they do not. Getting it
+-- wrong corrupts the letter AFTER this one, which is why it is worth the table.
+local function dualJoining(rule, ch)
+	if rule == nil then return false end
+	if ch ~= nil and FORCE_DUAL[ch] then return true end
+	return rule.ini ~= rule.iso and rule.mid ~= rule.fin
 end
 
 -- Substitute each Arabic base letter with its contextual presentation form and
@@ -247,12 +261,13 @@ local function reshapeArabic(s)
 		local nextCh = c[i + 1]
 		local lig = c[i] == LAM and nextCh and LAM_ALEF[nextCh]
 		if lig then
-			local joinBack = dualJoining(AR_FORMS[c[i - 1]])
+			local prevCh = c[i - 1]
+			local joinBack = dualJoining(AR_FORMS[prevCh], prevCh)
 			units[#units + 1] = { ch = joinBack and lig.b or lig.a, isArabic = true, joinsFwd = false }
 			i = i + 2
 		else
 			local rule = AR_FORMS[c[i]]
-			units[#units + 1] = { ch = c[i], rule = rule, isArabic = rule ~= nil, joinsFwd = dualJoining(rule) }
+			units[#units + 1] = { ch = c[i], rule = rule, isArabic = rule ~= nil, joinsFwd = dualJoining(rule, c[i]) }
 			i = i + 1
 		end
 	end

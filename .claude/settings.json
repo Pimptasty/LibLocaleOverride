@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Program Files \\(x86\\)/World of Warcraft/_classic_era_/Interface/AddOns/fastguildinvite/**)"
+      "Read(//c/Program Files \\(x86\\)/World of Warcraft/_classic_era_/Interface/AddOns/fastguildinvite/**)",
+      "ToolSearch",
+      "Monitor",
+      "mcp__checks__git_status",
+      "Edit(//c/Program Files (x86)/World of Warcraft/_classic_era_/Interface/AddOns/LibLocaleOverride/**)",
+      "mcp__checks__run_tests",
+      "mcp__checks__coverage",
+      "mcp__checks__todos",
+      "mcp__checks__lint_markdown",
+      "mcp__checks__lint_file",
+      "mcp__bank__bank_write",
+      "mcp__checks__file_size",
+      "WebFetch(domain:www.unicode.org)",
+      "WebFetch(domain:www.compart.com)",
+      "mcp__checks__ide_problems"
     ]
   }
 }

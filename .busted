@@ -1,0 +1,11 @@
+-- Thin shim: defer to the shared TOG busted config in the WoWAPITesting submodule
+-- (Tests/wowapi/busted_config.lua), so the actual config lives in one place across
+-- every addon using the harness. busted only reads .busted from the run dir, so
+-- this file has to exist here -- but it is fixed boilerplate.
+--
+-- VESTIGIAL: nothing in this suite runs busted. The entry point is
+-- `lua Tests/wowapi/run.lua` from the addon root, which needs only a Lua 5.1
+-- interpreter. This file is kept as the safety net that stops an accidental
+-- `busted` from also collecting the harness's own spec/ files.
+package.path = package.path .. ";./Tests/wowapi/?.lua"
+return require("busted_config")

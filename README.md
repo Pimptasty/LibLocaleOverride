@@ -6,27 +6,35 @@ addons, plus a **bundled-font manager** for scripts the WoW client can't render
 
 ## Status
 
-**v0.3.2** — runtime per-addon language override; a script-aware bundled-font
-manager covering most of the world's scripts (now with Latin merged in, so embedded
+**v0.3.3** -- runtime per-addon language override; a script-aware bundled-font
+manager covering most of the world's scripts (with Latin merged in, so embedded
 brand/command text never boxes); **locale-native numerals**; full **button** and
 **native-dropdown** fonting that sizes to the width a non-Latin label is actually painted
 at; a **client-locale resolver** (`GetClientLocale`) for chat/print output in a
 chat-renderable language; right-to-left support (Hebrew + Arabic / Persian / Urdu,
-with Arabic contextual shaping); and optional AceGUI integration — a two-column language
+with Arabic contextual shaping); and optional AceGUI integration -- a two-column language
 picker and an automatic tab-font handler. First consumer: **FastGuildInvite**.
+
+LibStub `MINOR` **16**. The three satellite files carry their own version stamps and
+upgrade independently of the core: `_aceguiMinor` 4, `_rtlMinor` 2, `_namesMinor` 1.
+
+**v0.3.3 adds no API and removes none.** It is a correctness and infrastructure release:
+an offline test suite at 100% line coverage, eleven peer-review findings answered, and
+three behaviour fixes -- retail's `|cn<NAME>:` colour tokens, Urdu `NOON GHUNNA` shaping,
+and the button auto-fit no longer writing widths onto buttons it has no business sizing.
 
 ## Why not AceLocale-3.0 / AddonLocale?
 
 - **AceLocale** keeps only the client-locale table + the default and resolves the
   language **once** at load (`GetLocale()` / `GAME_LOCALE`). It can't switch a
   language at runtime, and `GAME_LOCALE` is a single global that retargets **every**
-  AceLocale addon at once — antisocial toward addons you didn't write.
+  AceLocale addon at once -- antisocial toward addons you didn't write.
 - **AddonLocale** is a standalone, **global** user wrapper around `GAME_LOCALE`.
   Same global limitation; no per-addon picker; no fonts.
 - Neither handles **fonts** for non-renderable scripts.
 
 This library keeps **every** registered locale table, merges them on demand
-(enUS baseline + chosen locale on top), **per addon**, switchable live — so
+(enUS baseline + chosen locale on top), **per addon**, switchable live -- so
 picking Dutch for one addon never touches another. The locale-merging engine is an
 original implementation.
 
@@ -41,12 +49,14 @@ LLO:SetStore(addon, getFn, setFn)                 -- bind your SavedVariable
 LLO:ApplyStored(addon)                            -- restore override early at login
 LLO:SetOverride(addon, code)                      -- "auto" or a locale code
 LLO:GetLocale(addon)                              -- live merged table (read L[key] at build time)
+LLO:GetClientLocale(addon)                        -- merged table for the CLIENT locale, ignoring the override
 LLO:GetActiveCode(addon)                          -- resolved code; GetOverride / GetAvailable / HasLocale
 LLO:UnregisterAddon(addon)                        -- forget everything for an addon
 
 -- fonts
 LLO:GetFont(addon)                                -- bundled font path for the active locale
 LLO:FontForText(addon, text)                      -- font for a string by its own script
+LLO:FontObject(path, size, flags)                 -- cached Font OBJECT for a path (nil if the file fails)
 LLO:ApplyFontToString(fs, addon, opts)            -- the single font applicator
 LLO:ApplyFontToFrame(addon, frame)                -- re-font a frame's strings + buttons by script
 LLO:ApplyFontToButton(addon, button)              -- font a button across all states (+ auto-fit width)
@@ -61,7 +71,9 @@ LLO:SplitToBytes(text, maxBytes)                  -- byte-aware chat chunking (�
 
 -- AceGUI integration (LibLocaleOverride-AceGUI-1.0)
 LLO:RegisterAceGUIDropdown(addon, opts)           -- font-aware dropdown / two-column language picker
-LLO:AttachTabGroupFont(addon, tabGroup)           -- keep a TabGroup's tabs fonted for the active locale
+LLO:AttachTabGroupFont(addon, tabGroup, opts)     -- keep a TabGroup's tabs fonted for the active locale
+LLO:AllLanguageCodes()                            -- every code the library has names for, incl. "auto"
+LLO:LanguagePickerValues(codes)                   -- code -> native endonym, for a picker's value table
 LLO:IsAnyPulloutOpen() / LLO:OnPulloutClose(fn)   -- defer a panel refresh while a list is open
 LLO:HookCleanRelease(widget, restoreFn, key)      -- restore a pooled widget to stock on release
 
@@ -70,16 +82,77 @@ LLO:Shape(text)                                   -- logical -> visual order (sa
 LLO:IsRTL(addon) / LLO:IsRTLCode(code)            -- is the active locale / a given code right-to-left
 ```
 
+## Guarantees
+
+Promises the library has made to consumers. These are contracts, not implementation
+details -- they are safe to build on, and changing one is a breaking change.
+
+### Fonting never resizes what it fonts
+
+`ApplyFontToFrame` and `ApplyFontToButton` change how text **renders**. They never change
+a widget's **size, position, anchors, parent or layout** -- with exactly one exception.
+
+**The exception:** a button with **all** of a non-empty label, `SetWidth`/`GetWidth`, and a
+width **not** derived from two opposing horizontal anchors may have its **width** set, and
+nothing else. Never its height, points or parent. The width is only ever raised above the
+button's own captured design width or restored back down to it, so a button can never end
+up narrower than it was built.
+
+**Two opt-outs, both honoured:** give the button no label, or anchor it on both horizontal
+edges. (`button.lloFitPad` tunes the padding but does **not** exempt it.)
+
+### Other invariants
+
+- **`GetLocale(addon)` merges in place.** Capture the table once; it stays valid across a
+  runtime switch. Read `L[key]` at build time, not at file scope.
+- **Per addon, never global.** The library never touches `GAME_LOCALE` or anything
+  affecting addons you did not write.
+- **The library owns no SavedVariable.** Storage stays with the consumer via `SetStore`.
+- **An in-place upgrade is safe.** All state hangs off `lib.*` and is initialised
+  `lib.x = lib.x or {}`, so a consumer shipping a newer copy takes over without loss.
+
+## Easy to get wrong
+
+- **`Shape` goes AFTER `format()`, never on the raw template.** Reversing `%d` yields `d%`,
+  which no longer formats. Shape the filled string.
+- **`Shape` is safe on any string.** Text with no RTL character is returned byte-identical,
+  so wrap every display string unconditionally rather than branching on locale.
+- **`LocalizeDigits` is markup-aware** and will not rewrite digits inside `|cAARRGGBB`,
+  retail's `|cn<NAME>:` named colour tokens, `|T..|t`, `|A..|a` or `|H..|h`. Pass it whole
+  display strings; do not pre-split around escapes.
+- **`ApplyStored` early at login** restores the override before your first `GetLocale`.
+
+## Development
+
+Offline test suite, run locally by hand -- there is no CI, by design:
+
+```sh
+lua Tests/wowapi/run.lua
+lua Tests/wowapi/coverage.lua LibLocaleOverride-1.0.lua LibLocaleOverride-LanguageNames.lua \
+    LibLocaleOverride-AceGUI-1.0.lua LibLocaleOverride-RTL-1.0.lua
+```
+
+232 specs, **100% line coverage on all four shipped files** (1965/1965). It needs nothing
+but a Lua 5.1 interpreter; `Tests/wowapi` is the shared
+[WoWAPITesting](https://github.com/Pimptasty/WoWAPITesting) harness as a submodule, and
+`Tests` is excluded from the packaged zip. The library is loaded from this working tree
+through the harness, never vendored, so the bytes under test are the bytes that ship.
+
+Three append-only review boards carry the reasoning behind the current behaviour, and are
+the right place to look before changing any of it: `docs/AUDIT.md` (peer-review findings),
+`docs/LIBRARY_CONTRACTS.md` (what consumers have asked of this library) and
+`Tests/HARNESS_CONTRACT.md` (what this library has asked of the harness).
+
 ## Credits
 
 The locale-merging core is an original implementation. Bundled assets and adapted
 data:
 
-- **Fonts** — Google Noto (Latin/Greek/Cyrillic, Arabic, Hebrew, Devanagari, Bengali,
+- **Fonts** -- Google Noto (Latin/Greek/Cyrillic, Arabic, Hebrew, Devanagari, Bengali,
   Gurmukhi, Tamil, Telugu, Japanese, Korean, Chinese Simplified & Traditional) and
   Sarabun (Thai), all under the SIL Open Font License 1.1; each ships its `OFL.txt`
   under `fonts/<Script>/`.
-- **Arabic / Persian / Urdu reshaping tables** — the base-letter → presentation-form
+- **Arabic / Persian / Urdu reshaping tables** -- the base-letter -> presentation-form
   mappings are generated from the Unicode Arabic Presentation Forms via
   [python-arabic-reshaper](https://github.com/mpcabd/python-arabic-reshaper) (MIT, ©
   Abdullah Diab); the reshaping/ligature approach was seeded by

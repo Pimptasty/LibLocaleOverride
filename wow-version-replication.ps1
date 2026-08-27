@@ -145,14 +145,31 @@ function Get-PkgmetaIgnores([string]$pkgmetaPath) {
     return $ignores
 }
 
-# Always-skip -- git metadata + the sync script itself. These are belt-and-
+# Always-skip -- every dotfile, plus the sync script itself. These are belt-and-
 # suspenders against .pkgmeta drift; even if someone removes them from .pkgmeta
 # they should never end up in a target install.
+#
+# THE GENERAL DOTFILE RULE IS THE LOAD-BEARING ONE, and it was missing until
+# 2026-08-25 (audit finding 7). It mirrors what the BigWigs packager itself does
+# -- copy_directory_tree() prunes with `-name ".*" -prune` -- so this script and
+# the released zip agree about dotfiles instead of each deciding separately.
+#
+# Why it matters more than it looks: .pkgmeta CANNOT express it. Dot-entries in
+# an ignore: list are no-ops to the packager (it has already pruned them), so
+# nobody adding a new dotfile thinks to list one -- and before this rule, a new
+# dotfile that was not listed replicated silently. `.busted` and `.luacheckrc`
+# did exactly that the day they were created; measured with -DryRun, three
+# WOULD lines each, one per target install.
+#
+# The .pkgmeta dot-entries (.github, .vscode, .claude, .luarc.json, ...) are
+# therefore NOT the mechanism any more and are free to be deleted as the
+# packager-rule cleanup they always were. Until this line existed they were the
+# ONLY thing stopping those six paths replicating -- and .vscode is the one that
+# is not cosmetic, because .vscode/tasks.json is what launches this very watcher
+# on folder open, so replicating it installs a second watcher into another
+# flavour's install.
 $AlwaysSkip = @(
-    '(^|\\)\.git(\\|$)',
-    '^\.gitignore$',
-    '^\.gitattributes$',
-    '^\.gitmodules$',
+    '(^|\\)\.',
     '(^|\\)wow-version-replication\.ps1$'
 )
 

@@ -52,7 +52,7 @@ LibStub. License: MIT (see LICENSE).
 -- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
 -- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
 -- added after the initial MINOR=1).
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 14
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 16
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -307,9 +307,53 @@ local function measuredWidth(obj, text)
 	return measureFS:GetStringWidth() or 0
 end
 
+-- True when the button's width is derived from its ANCHORS rather than owned by it: a region pinned
+-- on both a *LEFT and a *RIGHT point takes its width from those two edges. Calling SetWidth on one
+-- is a conflicting instruction -- and even where the anchors win at paint time it still corrupts the
+-- answer GetWidth gives every OTHER reader, which is how a consumer's progress fill froze at the
+-- width of a window it no longer belonged to.
+--
+-- CENTER deliberately does not count: it constrains the midpoint, not an edge, so a CENTER-anchored
+-- button still needs a width of its own.
+local function widthIsAnchored(button)
+	if type(button.GetNumPoints) ~= "function" or type(button.GetPoint) ~= "function" then
+		return false                       -- cannot tell; behave as before
+	end
+	local left, right = false, false
+	for i = 1, (button:GetNumPoints() or 0) do
+		local point = button:GetPoint(i)
+		if type(point) == "string" then
+			if point:find("LEFT",  1, true) then left  = true end
+			if point:find("RIGHT", 1, true) then right = true end
+		end
+	end
+	return left and right
+end
+
 function lib:ApplyFontToButton(addon, button)
 	if type(button) ~= "table" or type(button.GetNormalFontObject) ~= "function" then return end
-	if button.__lloOrigFonts == nil then            -- cache stock per-state fonts once
+	-- Cache the stock per-state fonts -- but "once per FRAME" is not the same as "once per BUTTON",
+	-- and the frame is POOLED. AceGUI hands the same table out again to whoever asks next, so a
+	-- cache left on it describes a button that no longer exists and the restore path would put back
+	-- the PREVIOUS occupant's fonts.
+	--
+	-- We cannot ask AceGUI, because ApplyFontToFrame reaches buttons by walking GetChildren() and
+	-- never sees the owning widget. So the test is: IS THE BUTTON STILL CARRYING WHAT WE LEFT ON IT?
+	-- If its Normal font object is not the one we last installed, something else has re-fonted this
+	-- frame -- a pool reuse, or another addon -- and the cache is not ours to trust.
+	--
+	-- SLOT 3 IS ALWAYS `false` AND THAT IS SETTLED, NOT AN OVERSIGHT. Set/GetPushedFontObject does
+	-- not exist in ANY client: `PushedFontObject` appears zero times across every flavour tree of
+	-- the offline Blizzard source, while SetNormalFontObject / SetDisabledFontObject /
+	-- SetPushedTextOffset appear 337 times in 132 files -- which is the control that makes the zero
+	-- mean something. The pushed state is a text OFFSET, not a font swap.
+	--
+	-- Kept rather than deleted, decided 2026-08-25: the cache is read POSITIONALLY (`o[1]`..`o[4]`
+	-- below), so dropping the slot renumbers Disabled for zero observable gain, and `if button.SetX
+	-- then` is the right multi-version shape if a client ever grows the pair. Do NOT make this look
+	-- live by adding the method to a test stand-in -- `Tests/llo_helpers.lua` says why at length.
+	if button.__lloOrigFonts == nil
+	   or (button.__lloFontSet ~= nil and button:GetNormalFontObject() ~= button.__lloFontSet) then
 		button.__lloOrigFonts = {
 			button:GetNormalFontObject(),
 			button.GetHighlightFontObject and button:GetHighlightFontObject() or false,
@@ -354,23 +398,49 @@ function lib:ApplyFontToButton(addon, button)
 		if o[3] and button.SetPushedFontObject   then button:SetPushedFontObject(o[3]) end
 		if o[4] and button.SetDisabledFontObject then button:SetDisabledFontObject(o[4]) end
 	end
-	-- Auto-fit width (EVERY button -- no opt-in): grow the button when its now-fonted label
-	-- is wider than the width it was designed for, so a longer translation can't overflow,
-	-- and restore the design width for a shorter label. The original width is captured ONCE
-	-- as the floor, so this is idempotent and reverses cleanly on a locale switch. Crucially
-	-- it only acts when the text EXCEEDS the floor: a button whose label already fits -- a
-	-- square icon button with a short symbol, an English label that fits its box -- is left
-	-- exactly as-is. The button keeps its anchor, so a right-anchored action button just
-	-- extends leftward into its neighbour's slack. lloFitPad tunes the horizontal padding.
-	if button.SetWidth and button.GetWidth then
-		button.__lloFitFloor = button.__lloFitFloor or button:GetWidth() or 0
-		local floor, pad = button.__lloFitFloor, (button.lloFitPad or 26)
+	-- Record what we LEFT on the button, so the next call can tell our own state from somebody
+	-- else's. This is the only handle we have on "same incarnation" for a pooled frame.
+	button.__lloFontSet = button:GetNormalFontObject()
+	-- Auto-fit width: grow the button when its now-fonted label is wider than the width it was
+	-- designed for, so a longer translation can't overflow, and restore the design width for a
+	-- shorter label. It only acts when the text EXCEEDS the floor, so a button whose label already
+	-- fits is left exactly as-is. The button keeps its anchor, so a right-anchored action button
+	-- just extends leftward into its neighbour's slack. lloFitPad tunes the horizontal padding.
+	--
+	-- THREE THINGS THIS DELIBERATELY NO LONGER DOES, each of which it used to:
+	--   * It does not run for a button with NO LABEL. "Fit the button to its label" is undefined
+	--     with no label, and the only thing the block could do there was force the button back to a
+	--     width captured at some unrelated earlier moment.
+	--   * It does not run for a button whose width belongs to its ANCHORS (see widthIsAnchored).
+	--   * It does not trust a floor it did not leave there, and never caches a non-positive one.
+	if text ~= "" and button.SetWidth and button.GetWidth and not widthIsAnchored(button) then
+		local pad = button.lloFitPad or 26
+		-- A cached floor is OURS only if the button is still the width we last set it to. Anything
+		-- else -- a pooled reuse, a layout pass, another addon -- means the number describes a
+		-- different button, so drop it and re-capture below.
+		local cur = button:GetWidth() or 0
+		if button.__lloFitSet == nil or math.abs(cur - button.__lloFitSet) > 0.5 then
+			button.__lloFitFloor = nil
+		end
 		local function fit(w)
 			w = w or 0
+			-- Capture the floor LAZILY, and only when it is real. GetWidth returns 0 for a button
+			-- whose layout has not settled -- and 0 is TRUTHY in Lua, so the old
+			-- `floor or GetWidth() or 0` cached that zero for the whole session, after which every
+			-- label took the `w + pad` branch and the button had no minimum at all. Deferring lets
+			-- the next-frame pass below capture a real width instead.
+			local floor = button.__lloFitFloor
+			if not floor or floor <= 0 then
+				local now = button:GetWidth() or 0
+				if now <= 0 then return end       -- still not laid out; try again next frame
+				floor = now
+				button.__lloFitFloor = now
+			end
 			local target = (w > floor) and (w + pad) or floor
-			if target > 0 and math.abs(target - button:GetWidth()) > 0.5 then
+			if target > 0 and math.abs(target - (button:GetWidth() or 0)) > 0.5 then
 				button:SetWidth(target)
 			end
+			button.__lloFitSet = target
 		end
 		-- WoW does not shape complex scripts. For Indic / Arabic the bundled font's matra and
 		-- mark advances collapse under GetStringWidth, so it reports far LESS than the width the
@@ -740,8 +810,32 @@ function lib:LocalizeDigits(addon, text)
 	while i <= n do
 		local two = text:sub(i, i + 1)
 		if two == "|c" then
-			out[#out + 1] = text:sub(i, i + 9)            -- |c + 8 hex colour bytes
-			i = i + 10
+			-- TWO FORMS, and only the first is fixed-length. |cAARRGGBB is 8 hex bytes; retail also
+			-- has |cn<NAME>: (ColorManager.lua's named colour tokens, e.g. |cnIQ4:), whose name is
+			-- arbitrary length and MAY CONTAIN DIGITS. Parsing that one by the fixed width leaves
+			-- its tail outside the skip, so a digit in the name is rewritten to a native digit and
+			-- the token stops resolving. Classic has no |cn at all, so this branch is retail-only --
+			-- which is exactly why it was missed: the library's own development flavour never shows
+			-- it. Every other escape here is already parsed to its terminator; this makes |c match.
+			if text:sub(i + 2, i + 2) == "n" then
+				-- The name must be WELL-FORMED, not merely followed by a colon somewhere. An
+				-- unbounded `find(":")` searches the whole remainder, and ":" is one of the
+				-- commonest characters in UI text -- so a malformed "|cnBROKEN Level 60: 5" would
+				-- swallow up to the colon after "60" and leave those digits un-localized in the
+				-- middle of a string whose others were rewritten. The three sibling escapes get away
+				-- with an unbounded search because their terminators are two bytes (|t, |a, |h) and
+				-- effectively never occur in prose; a bare colon does. Anchored at i+3, so this
+				-- accepts only <identifier>: immediately after "|cn".
+				-- %w (letters + digits) is what a token name is. A name using anything outside that
+				-- would fall through to the literal branch below -- un-localized digits inside a
+				-- token nobody ships, never corruption, which is the safe direction to be wrong in.
+				local _, e = text:find("^%w+:", i + 3)
+				if e then out[#out + 1] = text:sub(i, e); i = e + 1
+				else out[#out + 1] = two; i = i + 2 end
+			else
+				out[#out + 1] = text:sub(i, i + 9)        -- |cAARRGGBB
+				i = i + 10
+			end
 		elseif two == "|T" then
 			local e = text:find("|t", i + 2, true)
 			if e then out[#out + 1] = text:sub(i, e + 1); i = e + 2
@@ -785,7 +879,10 @@ local function walkFonts(self, addon, frame, depth)
 			-- per-state font OBJECTS, so a plain FontString re-font can't stop it boxing the
 			-- moment it's hovered/pushed. Font those states too -- this makes EVERY button
 			-- under a walked frame correct automatically, with no per-button call sites.
-			-- ApplyFontToButton is a no-op for a textless (icon) button.
+			-- ApplyFontToButton leaves a textless (icon) button's WIDTH alone -- it still restores
+			-- that button's stock font objects, which is cheap and correct. The comment here used
+			-- to claim the whole call was a no-op for one, and it was not: the auto-fit ran and
+			-- forced such buttons back to a stale width.
 			if child.GetObjectType and child:GetObjectType() == "Button"
 			   and child.GetNormalFontObject then
 				self:ApplyFontToButton(addon, child)

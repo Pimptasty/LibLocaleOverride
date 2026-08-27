@@ -25,6 +25,9 @@ ignore:
   - .vscode
   - .claude
   - docs
+  # Offline unit tests + the WoWAPITesting harness submodule. Dev-only; bare folder
+  # name so the packager rewrites it to "Tests/*" and the submodule goes with it.
+  - Tests
   # *.txt is NOT ignored: each bundled font ships its OFL.txt, which the SIL Open
   # Font License requires to be distributed alongside the font.
   - "*.ps1"

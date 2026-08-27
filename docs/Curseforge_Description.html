@@ -10,6 +10,20 @@
 
 <p>LibLocaleOverride keeps <strong>every</strong> registered locale table and merges them on demand (an English baseline + the chosen language on top, so a partial translation still falls back cleanly) — <strong>per addon</strong> and switchable live. Picking a language for one addon never affects another. A bundled-font manager covers non-Latin scripts, and a change callback lets widgets refresh in place.</p>
 
+<h2>What You Get</h2>
+
+<ul>
+<li><strong>Per-addon language override, switchable live.</strong> No <code>/reload</code>, and no effect on any addon you didn't write — <code>GAME_LOCALE</code> is never touched.</li>
+<li><strong>Every registered locale table is kept</strong> and merged on demand (English baseline + chosen language on top), so a partial translation falls back key-by-key instead of failing over wholesale.</li>
+<li><strong>Bundled fonts for scripts WoW can't render</strong> — Thai, Hindi/Marathi, Bengali, Punjabi, Tamil, Telugu, Hebrew, Arabic, Japanese, Korean, Chinese (Simplified &amp; Traditional), Cyrillic and Latin. Applied per string by the script that string actually uses, so a picker listing many languages at once renders all of them — and the bundled faces carry Latin too, so English names, slash-commands and brands sitting inside translated text don't turn into boxes.</li>
+<li><strong>Right-to-left support</strong> — Hebrew and Arabic/Persian/Urdu, with contextual Arabic letter shaping and bidirectional reordering, both of which the WoW font engine does not do at all.</li>
+<li><strong>Locale-native numerals</strong>, markup-aware: digits inside colour codes, textures, atlases and hyperlinks are left alone.</li>
+<li><strong>Fonting that covers real widgets</strong> — fontstrings, whole frames recursively, buttons across every state, native Blizzard dropdown lists, and AceGUI tab strips.</li>
+<li><strong>A client-locale resolver</strong> for chat and print output, so text leaving your addon stays readable in a chat window that can't render the chosen script.</li>
+<li><strong>Optional AceGUI integration</strong> — a two-column language picker showing each language in both the current language and its own native name, and an automatic tab-font handler.</li>
+<li><strong>Offline test suite at 100% line coverage</strong>, so the per-script behaviour an English-client developer cannot see by playing is checked before it ships.</li>
+</ul>
+
 <h2>For Developers</h2>
 
 <p>Embed via LibStub and register your locale tables:</p>
@@ -24,7 +38,31 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 
 <p>Add it to your addon as an <strong>external dependency</strong> — one canonical copy across your whole addon family. Read <code>L[key]</code> when you build a widget, never frozen at load, so a live language switch takes effect.</p>
 
+<p>Then font and shape what you display:</p>
+
+<pre><code>LLO:ApplyFontToFrame("MyAddon", myWindow)   -- fontstrings + buttons, by each string's script
+LLO:RegisterManagedFontString("MyAddon", fs) -- or let the library re-font it on every switch
+LLO:RegisterCallback("MyAddon", RefreshUI)   -- rebuild your widgets on a switch
+
+local line = LLO:LocalizeDigits("MyAddon", string.format(L.KILLS, n))
+myText:SetText(LLO:Shape(line))              -- Shape AFTER format(), never on the template
+</code></pre>
+
+<p><strong>Two guarantees worth knowing.</strong> First, <em>fonting never resizes what it fonts</em>: <code>ApplyFontToFrame</code> and <code>ApplyFontToButton</code> change how text renders, never a widget's size, position, anchors, parent or layout. The single exception is that a labelled button whose width isn't derived from two opposing horizontal anchors may have its <em>width</em> raised to fit a longer translated label — and never below the width it was built at. Give a button no label, or anchor it on both horizontal edges, to opt out entirely.</p>
+
+<p>Second, <code>Shape</code> is <em>safe on any string</em>: text containing no right-to-left character comes back byte-identical, so you can wrap every display string unconditionally instead of branching on the active locale.</p>
+
+<p><strong>Version stamps:</strong> LibStub <code>MINOR</code> 16; the AceGUI, RTL and language-name satellites carry their own stamps (<code>_aceguiMinor</code> 4, <code>_rtlMinor</code> 2, <code>_namesMinor</code> 1) and upgrade independently, so the newest copy of each file wins regardless of load order.</p>
+
 <h2>Recent Updates</h2>
+
+<p><strong>v0.3.3 (2026-08-25)</strong> — an Urdu text-shaping fix, a retail colour-code fix, plus internal test coverage</p>
+<ul>
+<li><strong>Urdu and Arabic script:</strong> Arabic letters change shape depending on what sits next to them, and the game does none of that work — this library does it. One Urdu letter (the dotless <em>noon ghunna</em>) was being treated as though nothing could join onto it, which drew the <em>following</em> letter in its stand-alone shape instead of its joined one. Fixed, and the letter classifications are now checked against Unicode's own published data rather than inferred.</li>
+<li><strong>Retail only:</strong> coloured text using the game's newer named colour codes could come out broken when an addon displayed numbers in a language with its own numerals (Hindi, Bengali, Arabic and so on) — the colour code itself was being rewritten. Fixed. On Classic Era, Burning Crusade and Mists of Pandaria Classic nothing changes at all: those clients do not use that colour form.</li>
+<li>Everything else is behind the scenes: the library now has an automated test suite covering every line of its code, run before any future change ships. Most of what this library does — Thai, Hindi, Bengali, Tamil, Telugu, Hebrew, Arabic, Korean, Japanese and Chinese rendering — can only be seen by actually switching language, so a change that broke one of them could previously reach you before anyone noticed.</li>
+<li>Housekeeping: the compatibility numbers for Wrath and Cataclysm Classic were refreshed. Those clients no longer exist, so this affects nobody — it is tidied only so the list stays in step with the rest of the addon family.</li>
+</ul>
 
 <p><strong>v0.3.2 (2026-07-28)</strong> — updated for the latest game clients</p>
 <ul>
@@ -74,4 +112,4 @@ local L = LLO:GetLocale("MyAddon")                       -- read L[key] at BUILD
 
 <h2>License</h2>
 
-<p>MIT. Original implementation — contains no third-party code beyond the public-domain LibStub.</p>
+<p>MIT. The locale-merging core, the font routing and the BiDi/shaping logic are an original implementation. Bundled and adapted third-party assets: the public-domain <strong>LibStub</strong>; <strong>Google Noto</strong> and <strong>Sarabun</strong> fonts under the SIL Open Font License 1.1, each shipping its own <code>OFL.txt</code> under <code>fonts/&lt;Script&gt;/</code>; and the Arabic/Persian/Urdu base-letter to presentation-form tables, generated from the Unicode Arabic Presentation Forms via <a href="https://github.com/mpcabd/python-arabic-reshaper">python-arabic-reshaper</a> (MIT, © Abdullah Diab), with the reshaping/ligature approach seeded by <a href="https://github.com/DiNaSoR/Arabic_Reshaper_LUA">Arabic_Reshaper_LUA</a> (MIT).</p>
