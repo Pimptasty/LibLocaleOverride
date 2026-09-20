@@ -95,8 +95,10 @@ end
 -- "البرتغالية (البرازيل)" renders with the parentheses visually backwards. We treat
 -- these as RTL-context (mirrored, and NOT pulled into an LTR run) -- correct for the
 -- dominant case where the parenthetical matches the base direction, which is every
--- localized language name here. (A Latin parenthetical inside RTL would mirror wrong,
--- but that doesn't occur in these labels.)
+-- localized language name here. A lone Latin parenthetical beside RTL text ALSO comes
+-- out right (mirror + reversal cancel; measured in Tests/rtl_spec.lua). What does NOT:
+-- brackets INSIDE a Latin phrase ("Foo (Bar)") split that phrase into separately
+-- restored pieces -- see the limit stated on lib:Shape. No shipped label has that shape.
 local MIRROR = {
 	["("] = ")", [")"] = "(", ["["] = "]", ["]"] = "[",
 	["{"] = "}", ["}"] = "{", ["<"] = ">", [">"] = "<",
@@ -292,9 +294,18 @@ end
 
 --- Convert logical-order text to the visual order WoW's LTR renderer needs. Arabic
 --- is reshaped to contextual presentation forms first, then RTL text (Hebrew/Arabic)
---- is BiDi-reordered; text with no RTL characters is returned unchanged, so this is
---- safe to wrap around ANY string -- including format() results, which is where it
---- MUST be applied (after %d/%s are filled, never on the raw template).
+--- is BiDi-reordered; text with no RTL characters is returned unchanged, so wrapping a
+--- string that MIGHT be RTL costs nothing -- including format() results, which is where
+--- it MUST be applied (after %d/%s are filled, never on the raw template).
+---
+--- KNOWN LIMIT, not a guarantee of safety for any string: this is the UI-label subset
+--- of BiDi, not the embedding-level algorithm (see the header). Paired brackets are
+--- ALWAYS treated as RTL-context (see MIRROR and visualOrder), so they split any Latin
+--- run they sit inside: "Foo (Bar) <hebrew>" comes back with "(Bar)" and "Foo" swapped,
+--- where real BiDi keeps a Latin phrase whole. A lone parenthetical -- "<hebrew> (Beta)"
+--- -- is fine (measured in Tests/rtl_spec.lua, both cases). Every label this library
+--- ships avoids the failing shape; a consumer wrapping arbitrary strings is not bound
+--- by that and should know.
 function lib:Shape(text)
 	if not text or text == "" or not hasRTL(text) then return text end
 	return visualOrder(reshapeArabic(text))

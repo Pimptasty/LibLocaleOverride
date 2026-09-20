@@ -3,7 +3,7 @@
 -- actually reach the widget, in every state, and did it come back off again?".
 --
 -- THE AUTO-FIT BLOCK'S THREE DEFECTS ARE NOW FIXED AND SPECCED, and this header used to say the
--- opposite. `docs/AUDIT.md` findings 3 (a zero floor cached permanently, because 0 is truthy),
+-- opposite. Peer-review findings 3 (a zero floor cached permanently, because 0 is truthy),
 -- 4 (floor and stock-font cache outliving a POOLED button) and 5 (the block running at all for a
 -- textless or anchor-sized button) were open while this file was first written, so it deliberately
 -- drove the block only for a labelled button with a real design width. That restriction is gone;

@@ -94,6 +94,24 @@ describe("lib:Shape -- BiDi ordering", function()
 		assert.equal("{" .. revChars(T.hebrew) .. "}", lib:Shape("{" .. T.hebrew .. "}"))
 		assert.equal("<" .. revChars(T.hebrew) .. ">", lib:Shape("<" .. T.hebrew .. ">"))
 	end)
+
+	-- Audit finding 12 claimed a Latin parenthetical beside RTL text comes out with its brackets
+	-- the wrong way round. RUN, not traced: it does not. Mirroring the glyph and reversing the
+	-- position cancel out, so "(Beta)" wraps its word correctly and sits where an RTL reader
+	-- expects it. Pinned so the claim cannot be re-raised from a reading.
+	it("keeps a lone Latin parenthetical beside RTL text correctly bracketed", function()
+		assert.equal("(Beta) " .. revChars(T.hebrew), lib:Shape(T.hebrew .. " (Beta)"))
+	end)
+
+	-- THE ACTUAL DOCUMENTED LIMIT, stated on `lib:Shape` and in README. Brackets are ALWAYS RTL-context, so a
+	-- Latin run that CONTAINS a bracket pair is split at the brackets and each piece restored on
+	-- its own: "Foo (Bar)" comes back as "(Bar)Foo " -- the words swap and the space moves.
+	-- Real BiDi resolves brackets between two Latin words to Latin and keeps the run whole.
+	-- This spec pins the limit the docstring states, so the two cannot drift apart silently:
+	-- fixing the algorithm makes this go red, and that is the signal to rewrite the docstring.
+	it("PROBE: a Latin run containing brackets is split at them -- the known limit", function()
+		assert.equal(revChars(T.hebrew) .. " (Bar)Foo ", lib:Shape("Foo (Bar) " .. T.hebrew))
+	end)
 end)
 
 describe("lib:Shape -- Arabic contextual reshaping", function()

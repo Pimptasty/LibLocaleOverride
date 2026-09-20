@@ -20,39 +20,32 @@ scripts WoW can't render.
 - **Comments** explain the non-obvious "why"; update stale comments in blocks you edit. **Fix lint/compile errors automatically.**
 - **Minimal, direct tool use** -- edit with the file tools; reserve the shell for git / build / syntax-check.
 
-## The three boards -- READ THEM AT SESSION START
+## The inbox is the channel -- there are no boards
 
-Each is a two-way, **append-only** conversation between sessions that never share a context window.
-Nobody edits, re-titles, re-orders or moves what is already there -- not even their own earlier text.
-A response is a block appended **directly under** the thing it answers. This is enforced by a
-`PreToolUse` law, not merely asked for.
+This workspace is onboarded to **writ** (`LibLocaleOverride@classic_era`). Peer-review findings,
+consumer contracts and harness requests all travel as writ inbox documents, and writ lists what is
+waiting on every prompt. Read them with `{"tool":"review"}` on the desk (`writ desk path`), reply
+with `action:"reply"`, close your side with `action:"state"`.
 
-| File | Direction | Who raises | Who acts |
-| --- | --- | --- | --- |
-| [`docs/AUDIT.md`](docs/AUDIT.md) | sideways | a peer-review session | **us** |
-| [`docs/LIBRARY_CONTRACTS.md`](docs/LIBRARY_CONTRACTS.md) | inbound | a consuming addon | **us** |
-| [`Tests/HARNESS_CONTRACT.md`](Tests/HARNESS_CONTRACT.md) | outbound | **us** | a harness session |
-
-- **NEVER READ STATE FROM A SUMMARY VIEW ON THESE BOARDS -- READ THE RESPONSE BLOCKS.**
-  `docs/AUDIT.md`'s `Status` table `State` column and `docs/LIBRARY_CONTRACTS.md`'s `Index` table
-  both **cannot be updated**: the append-only law refuses the edit, measured, twice. So every cell in
-  them is the state at the moment the row was written and never after. **The same is true of the two
-  lines below and of any pointer in this file.** A session read the `Index` cell saying `OPEN`, plus
-  a stale line here, and reported a delivered contract as outstanding -- with both files' own
-  warnings against exactly that already read in the same session. Open the blocks.
-- **`docs/AUDIT.md`: findings 1 through 11 are all answered in place** as of 2026-08-25, and round 9
-  is requested and unanswered. Findings 3, 4 and 5 all pointed at the auto-fit block and were **three
-  different defects** fixed together; read finding 4's addendum and finding 5's opening table before
-  touching that code, because the tempting one-line fix for any one leaves the other two.
-- **`docs/LIBRARY_CONTRACTS.md`: request 1 is DELIVERED** (MINOR 16) -- the guarantee that fonting a
-  frame never resizes what it fonts, stated in full at `:212-261` with its one exception and two
-  opt-outs. **That guarantee is now a promise this library has made to consumers**: read it before
-  changing anything in `ApplyFontToFrame` / `ApplyFontToButton`.
-- **Ask for a review** by appending a `## Review requested -- <date> -- <round>, <why>` section to
-  `docs/AUDIT.md`. That is the only trigger there is. Ask before a release, and again after
-  answering a round.
-- **A finding is a defect we have; a contract is something we do not do yet.** Keep them in the
-  right file.
+- **The three markdown boards (`docs/AUDIT.md`, `docs/LIBRARY_CONTRACTS.md`,
+  `Tests/HARNESS_CONTRACT.md`) were imported into the inbox and deleted on 2026-09-20.** Their text
+  is in git history (last present at `3bebfe1`); the reasoning that still governs code is in the code
+  comments, `README.md` (the Guarantees section) and the bank. Do not recreate them.
+- **Ask for a review** by sending on the `audit` channel to `Peer Review`. Ask before a release, and
+  again after answering a round.
+- **Raise a harness gap** by sending on the `harness` channel to `WoWAPITesting`, with a local
+  stand-in staged so the suite runs green today.
+- **A finding is a defect we have; a contract is something we do not do yet.** Say which.
+- **The auto-fit block (`ApplyFontToButton`) had THREE different defects fixed together** (audit
+  findings 3, 4 and 5: a zero floor cached forever, two caches on a pooled frame never cleared, and
+  fitting textless / double-anchored buttons). The tempting one-line fix for any one leaves the other
+  two; `Tests/font_apply_spec.lua` pins all three.
+- **The guarantee that fonting never resizes what it fonts** (README, Guarantees; delivered to
+  FastGuildInvite at MINOR 16) is a promise consumers build on. Read it before changing anything in
+  `ApplyFontToFrame` / `ApplyFontToButton`.
+- **The `## Interface` list is asserted, not transcribed.** `Tests/toc_spec.lua` fails when the list
+  lacks a value shipped by an installed consumer that hard-depends on us, or the interface of an
+  active product in `.build.info`. Add the value and let the spec confirm it.
 
 ## Offline test suite
 
@@ -69,11 +62,14 @@ lua Tests/wowapi/coverage.lua LibLocaleOverride-1.0.lua LibLocaleOverride-Langua
 - **Write the spec for how the code SHOULD behave**, then fix the code where it diverges. A spec that
   ratifies current behaviour is worth less than none, because it makes the eventual fix look like the
   regression. `Tests/font_apply_spec.lua`'s header names the auto-fit cases it deliberately does not
-  assert, and why -- keep that list honest as findings 3, 4 and 5 are fixed.
+  assert, and why -- keep that list honest.
+- **`Tests/toc_spec.lua` reads OUTSIDE the repo on purpose** -- sibling consumer TOCs and the WoW
+  root's `.build.info` -- and fails if either set is empty. It runs from the installed addon folder,
+  which is the only place this suite is ever run.
 - **The library loads through the harness's `env/libs.lua`**, from this working tree. Never vendor a
   copy into `Tests/`.
 - **Never edit `Tests/wowapi`** -- it is a submodule checkout shared by ~20 addons and the next pull
-  discards your change. Raise it in `Tests/HARNESS_CONTRACT.md` and stage a local stand-in that
-  yields to the real thing.
+  discards your change. Raise it on the inbox (`harness` channel, to `WoWAPITesting`) and stage a
+  local stand-in that yields to the real thing.
 - **Text METRICS in the harness are a deliberate fiction.** Use `frames.setStringWidth(text, w)` to
   drive width logic; never assert an absolute painted width.

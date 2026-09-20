@@ -25,7 +25,10 @@ local H = { wow = wow, frames = frames, libs = libs }
 -- `env.libs`'s root is `..` (the AddOns folder), so from this addon's root that resolves back to
 -- this very working tree: the bytes under test are the bytes that ship.
 libs.load("LibLocaleOverride-1.0")
-H.lib = LibStub("LibLocaleOverride-1.0")
+-- `assert`, not a bare call: LibStub returns nil for an unregistered major, and every spec would
+-- then fail on its first `lib:` call with an unhelpful "attempt to index nil". It also narrows the
+-- type for the language server, which otherwise flags every `lib:` call in every spec as nil-able.
+H.lib = assert(LibStub("LibLocaleOverride-1.0"), "LibLocaleOverride-1.0 did not register")
 
 -- Every addon name a spec has touched, so `H.reset()` can clear the library's persistent
 -- `lib.registry` between examples. The registry is state on the library object, and the whole

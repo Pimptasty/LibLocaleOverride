@@ -1,5 +1,67 @@
 # Lib: LocaleOverride
 
+## [v0.3.4] (2026-09-20) -- WoW Forever and Midnight 12.1 in the interface list, asserted not transcribed
+
+No Lua behaviour changes and no `MINOR` bump: the shipped `.lua` files differ from v0.3.3 only in
+comments. What changed is the TOC, the test suite, and where the project's review conversations live.
+
+### `## Interface:` gains `16001` (WoW Forever) and `120100` (Midnight 12.1), and a spec now guards the list
+
+- **The list is now** `11508, 11509, 16001, 20505, 20506, 30405, 38002, 40402, 50503, 50504, 110207,
+  120005, 120007, 120100` -- Ace3's list plus `110207`, character-for-character LibAceGUIWidgets',
+  plus `16001`. The two that matter: **`120100`** is the installed Retail client (`.build.info`:
+  `12.1.0.69875`), and a hard dependency the client flags out of date stops the CONSUMER loading;
+  **`16001`** is World of Warcraft: Forever (Battle.net `wow_classic_beta`, TOC suffix `_Camelot`,
+  confirmed on the wiki's TOC-format page), which FastGuildInvite v2.14.0 ships a TOC for while
+  hard-depending on this library. The other four (`11508`, `20505`, `38002`, `50503`) are the
+  test/PTR values Ace3 carries; listing them costs nothing and keeps this list a superset of the one
+  library every consumer here also loads.
+- **Requested three times on the inbox** -- by the harness and LibAceGUIWidgets on 2026-09-10
+  (`120100`), and by FastGuildInvite on 2026-09-20 (`16001`). Both peer-review threads made the same
+  point: this list was fixed by transcription in August and was stale again within a month, so
+  transcribing it again is not the fix.
+- **New `Tests/toc_spec.lua` asserts the invariant instead of the values.** It reads every `*.toc`
+  under the sibling AddOns folder that names `LibLocaleOverride` in `## Dependencies` /
+  `## RequiredDeps` (FastGuildInvite's seven, Dibs' two) and fails if any of their interface values is
+  missing from ours; and it reads the WoW root's `.build.info`, converts every ACTIVE product's
+  version (`12.1.0` -> `120100`), and fails if any is missing. Both assert the source set is non-empty
+  before comparing, so neither can pass by finding nothing. The version arithmetic is pinned by its
+  own example. **Driven red first** by removing the two new values: both failures named the value
+  and the file it came from. This library declares no `## Dependencies` (Ace3 is optional -- the
+  AceGUI satellite feature-detects it), so the "superset of your own dependency" rule other libraries
+  use has no floor here; the installed consumers and the client artefact are the anchor instead.
+
+### `lib:Shape` -- the docstring said "safe to wrap around ANY string"; it now states the real limit (finding 12)
+
+- **The finding was right that two comments in `LibLocaleOverride-RTL-1.0.lua` disagreed** -- `:296`
+  promised safety for any string while `:98-99` conceded a Latin parenthetical inside RTL "would
+  mirror wrong". **Measured before rewriting either, and the conceded case does not fail.**
+  `<hebrew> (Beta)` shapes to `(Beta) <hebrew reversed>`, which is correct: `visualOrder` mirrors the
+  bracket glyph before reversing its position, so the two cancel, and UAX#9 resolves those brackets
+  to the RTL embedding direction anyway.
+- **The actual limit is one step over:** brackets ALWAYS break an LTR run, so a Latin phrase that
+  contains a bracket pair -- `Foo (Bar) <hebrew>` -- is split at the brackets and comes back as
+  `<hebrew reversed> (Bar)Foo` plus a trailing space. Real BiDi resolves brackets between two Latin
+  words to Latin and
+  keeps the phrase whole. Both comments now say this; the algorithm is unchanged (the header's
+  "UI-label subset of BiDi" scope stands), and `README.md`'s "safe on any string" bullet says the
+  same.
+- **Two new examples in `Tests/rtl_spec.lua`** pin both cases: the correct one so the finding's
+  scenario cannot be re-raised from a reading, and the failing one labelled `PROBE` so that fixing the
+  algorithm turns it red and that is the signal to rewrite the docstring.
+
+### Review conversations moved from three markdown boards to the writ inbox
+
+- **`docs/AUDIT.md`, `docs/LIBRARY_CONTRACTS.md` and `Tests/HARNESS_CONTRACT.md` are deleted.**
+  Every item on them was imported into writ's inbox (peer-review to `Peer Review`, contracts to
+  `fastguildinvite@classic_era`, harness to `WoWAPITesting`), the ones settled in prose on the boards
+  were closed there with the reason, and the files removed. Their text is in git history at
+  `3bebfe1`. The reasoning that still governs code -- the three auto-fit defects, the
+  fonting-never-resizes guarantee, the absent `SetPushedFontObject` -- was already in the code
+  comments, `README.md`'s Guarantees section and `Tests/llo_helpers.lua`, and `CLAUDE.md` now points
+  there instead of at the boards.
+- **Suite: 238 passed, 0 failed**, 100% line coverage on all four shipped files.
+
 ## [v0.3.3] (2026-08-25) -- offline test suite, 100% coverage, and the three review boards
 
 Mostly a development-infrastructure release -- an offline test suite, three review boards, and a

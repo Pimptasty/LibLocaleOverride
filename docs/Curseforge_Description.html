@@ -50,11 +50,21 @@ myText:SetText(LLO:Shape(line))              -- Shape AFTER format(), never on t
 
 <p><strong>Two guarantees worth knowing.</strong> First, <em>fonting never resizes what it fonts</em>: <code>ApplyFontToFrame</code> and <code>ApplyFontToButton</code> change how text renders, never a widget's size, position, anchors, parent or layout. The single exception is that a labelled button whose width isn't derived from two opposing horizontal anchors may have its <em>width</em> raised to fit a longer translated label — and never below the width it was built at. Give a button no label, or anchor it on both horizontal edges, to opt out entirely.</p>
 
-<p>Second, <code>Shape</code> is <em>safe on any string</em>: text containing no right-to-left character comes back byte-identical, so you can wrap every display string unconditionally instead of branching on the active locale.</p>
+<p>Second, <code>Shape</code> <em>costs nothing on text that isn't right-to-left</em>: a string with no Hebrew or Arabic character comes back byte-identical, so you can wrap every display string instead of branching on the active locale. It is the UI-label subset of bidirectional layout, not the full algorithm, and has one known limit: a Latin phrase that <em>contains</em> a bracket pair next to right-to-left text — <code>Foo (Bar) &lt;hebrew&gt;</code> — comes back with its pieces re-ordered. A lone bracketed word (<code>&lt;hebrew&gt; (Beta)</code>) is fine.</p>
+
+<p><strong>Supported clients</strong>, from one TOC: Classic Era, Anniversary / Burning Crusade, Wrath, Cataclysm, Mists of Pandaria Classic, Retail (Midnight), and World of Warcraft: Forever. The compatibility list is checked by the library's own test suite against every installed addon that depends on it, so a dependant is never held back by this library showing as out of date.</p>
 
 <p><strong>Version stamps:</strong> LibStub <code>MINOR</code> 16; the AceGUI, RTL and language-name satellites carry their own stamps (<code>_aceguiMinor</code> 4, <code>_rtlMinor</code> 2, <code>_namesMinor</code> 1) and upgrade independently, so the newest copy of each file wins regardless of load order.</p>
 
 <h2>Recent Updates</h2>
+
+<p><strong>v0.3.4 (2026-09-20)</strong> — loads on World of Warcraft: Forever and on Retail 12.1</p>
+<p><strong>Changed</strong></p>
+<ul>
+<li>Marked compatible with <strong>World of Warcraft: Forever</strong> (the Classic-content beta on the modern client) and with <strong>Retail 12.1 (Midnight)</strong>. Addons that require this library — FastGuildInvite and Dibs among them — were being held back on those clients because a required library the game considers out of date stops the addon itself from loading. Nothing about how languages, fonts or layout behave is different.</li>
+<li>The compatibility list is now checked automatically against every installed addon that depends on this library, so it cannot quietly fall behind again.</li>
+<li>The documentation for right-to-left text shaping now states its one known limit plainly: a Latin phrase containing brackets, placed next to Hebrew or Arabic text, can come out with its parts re-ordered. A lone bracketed word such as "(Beta)" is fine. This was already how it behaved; the description previously over-promised.</li>
+</ul>
 
 <p><strong>v0.3.3 (2026-08-25)</strong> — an Urdu text-shaping fix, a retail colour-code fix, plus internal test coverage</p>
 <ul>
@@ -89,22 +99,7 @@ myText:SetText(LLO:Shape(line))              -- Shape AFTER format(), never on t
 <li>Bundled fonts now include the Latin alphabet, so English names, slash-commands or brands sitting inside translated text show up instead of empty boxes.</li>
 </ul>
 
-<p><strong>v0.2.0 (2026-06-14)</strong> — right-to-left, full language coverage, drop-in pickers</p>
-<ul>
-<li>Right-to-left languages now supported — Hebrew and Arabic/Persian/Urdu, including proper Arabic letter shaping and right-to-left layout.</li>
-<li>Bundled fonts for nearly every script: added Vietnamese/Turkish/Hausa, Russian, Hebrew, Arabic, Punjabi, Japanese, Korean, and Chinese (Simplified &amp; Traditional), on top of Thai and the Indian languages.</li>
-<li>A ready-made two-column language picker for AceGUI: each language shown both in the current language and in its own native name and script, sorted A-Z.</li>
-<li>Tab strips stay in the correct font automatically — including while you hover or select a tab — and never leak a font into another addon.</li>
-<li>Many reliability fixes for use as a shared library across lots of addons.</li>
-</ul>
-
-<p><strong>v0.1.0 (2026-06-12)</strong> — first release</p>
-<ul>
-<li>Per-addon, runtime language override: an addon offers its own language picker, switchable live with no <code>/reload</code>, and untranslated text falls back to English.</li>
-<li>Bundled fonts for scripts WoW can't render — Thai, Hindi/Marathi, Bengali, Tamil, Telugu — applied only where that script actually appears, so a language list mixing many scripts never shows blank boxes.</li>
-<li>Optional AceGUI dropdown that renders non-Latin languages in both the selected value and the open list.</li>
-<li>Reference consumer: FastGuildInvite.</li>
-</ul>
+<p>Older release notes (v0.2.0 and v0.1.0) are in the addon's full changelog.</p>
 
 <h2>Community</h2>
 

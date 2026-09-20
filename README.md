@@ -6,7 +6,7 @@ addons, plus a **bundled-font manager** for scripts the WoW client can't render
 
 ## Status
 
-**v0.3.3** -- runtime per-addon language override; a script-aware bundled-font
+**v0.3.4** -- runtime per-addon language override; a script-aware bundled-font
 manager covering most of the world's scripts (with Latin merged in, so embedded
 brand/command text never boxes); **locale-native numerals**; full **button** and
 **native-dropdown** fonting that sizes to the width a non-Latin label is actually painted
@@ -18,10 +18,16 @@ picker and an automatic tab-font handler. First consumer: **FastGuildInvite**.
 LibStub `MINOR` **16**. The three satellite files carry their own version stamps and
 upgrade independently of the core: `_aceguiMinor` 4, `_rtlMinor` 2, `_namesMinor` 1.
 
-**v0.3.3 adds no API and removes none.** It is a correctness and infrastructure release:
-an offline test suite at 100% line coverage, eleven peer-review findings answered, and
-three behaviour fixes -- retail's `|cn<NAME>:` colour tokens, Urdu `NOON GHUNNA` shaping,
-and the button auto-fit no longer writing widths onto buttons it has no business sizing.
+**v0.3.4 adds no API and changes no behaviour.** It widens the TOC's `## Interface` list to
+cover World of Warcraft: Forever (`16001`) and Retail 12.1 (`120100`) -- a hard dependency
+the client flags out of date stops the consumer loading -- and adds a spec that asserts
+the list against the installed consumers and client rather than transcribing it. v0.3.3
+was the correctness release before it: an offline test suite at 100% line coverage and
+three behaviour fixes (retail's `|cn<NAME>:` colour tokens, Urdu `NOON GHUNNA` shaping,
+and the button auto-fit no longer writing widths onto buttons it has no business sizing).
+
+Supported clients (one TOC, comma-separated): Classic Era, Anniversary / TBC, Wrath,
+Cataclysm, Mists of Pandaria Classic, Retail (Midnight), and WoW: Forever.
 
 ## Why not AceLocale-3.0 / AddonLocale?
 
@@ -78,7 +84,7 @@ LLO:IsAnyPulloutOpen() / LLO:OnPulloutClose(fn)   -- defer a panel refresh while
 LLO:HookCleanRelease(widget, restoreFn, key)      -- restore a pooled widget to stock on release
 
 -- right-to-left (LibLocaleOverride-RTL-1.0)
-LLO:Shape(text)                                   -- logical -> visual order (safe on any string)
+LLO:Shape(text)                                   -- logical -> visual order; no-op on non-RTL text (see limit below)
 LLO:IsRTL(addon) / LLO:IsRTLCode(code)            -- is the active locale / a given code right-to-left
 ```
 
@@ -115,8 +121,12 @@ edges. (`button.lloFitPad` tunes the padding but does **not** exempt it.)
 
 - **`Shape` goes AFTER `format()`, never on the raw template.** Reversing `%d` yields `d%`,
   which no longer formats. Shape the filled string.
-- **`Shape` is safe on any string.** Text with no RTL character is returned byte-identical,
-  so wrap every display string unconditionally rather than branching on locale.
+- **`Shape` costs nothing on non-RTL text.** Text with no RTL character is returned
+  byte-identical, so wrap every display string rather than branching on locale. **One known
+  limit:** brackets are always treated as RTL-context, so a Latin phrase that _contains_ a
+  bracket pair next to RTL text -- `Foo (Bar) <hebrew>` -- comes back with its pieces
+  re-ordered. A lone parenthetical (`<hebrew> (Beta)`) is fine. This is the UI-label subset
+  of BiDi, not the embedding-level algorithm.
 - **`LocalizeDigits` is markup-aware** and will not rewrite digits inside `|cAARRGGBB`,
   retail's `|cn<NAME>:` named colour tokens, `|T..|t`, `|A..|a` or `|H..|h`. Pass it whole
   display strings; do not pre-split around escapes.
@@ -132,16 +142,18 @@ lua Tests/wowapi/coverage.lua LibLocaleOverride-1.0.lua LibLocaleOverride-Langua
     LibLocaleOverride-AceGUI-1.0.lua LibLocaleOverride-RTL-1.0.lua
 ```
 
-232 specs, **100% line coverage on all four shipped files** (1965/1965). It needs nothing
+238 specs, **100% line coverage on all four shipped files**. It needs nothing
 but a Lua 5.1 interpreter; `Tests/wowapi` is the shared
 [WoWAPITesting](https://github.com/Pimptasty/WoWAPITesting) harness as a submodule, and
 `Tests` is excluded from the packaged zip. The library is loaded from this working tree
 through the harness, never vendored, so the bytes under test are the bytes that ship.
 
-Three append-only review boards carry the reasoning behind the current behaviour, and are
-the right place to look before changing any of it: `docs/AUDIT.md` (peer-review findings),
-`docs/LIBRARY_CONTRACTS.md` (what consumers have asked of this library) and
-`Tests/HARNESS_CONTRACT.md` (what this library has asked of the harness).
+The `## Interface` list in the TOC is asserted rather than transcribed: `Tests/toc_spec.lua`
+fails if the list lacks any value shipped by an installed consumer that hard-depends on this
+library, or the interface number of any active product in the WoW install's `.build.info`.
+
+Peer-review findings, consumer contracts and harness requests travel through the writ inbox
+(see `CLAUDE.md`). The markdown boards that carried them until 2026-09-20 live in git history.
 
 ## Credits
 
