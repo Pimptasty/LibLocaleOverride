@@ -38,7 +38,13 @@ if (-not $DryRun) {
     $repoKey = (Resolve-Path -LiteralPath $Source -ErrorAction SilentlyContinue).Path
     if (-not $repoKey) { $repoKey = $Source }
     $repoKey = ($repoKey.ToLowerInvariant() -replace '[^a-z0-9]', '_')
-    $mutexName = "Global\WowDevSync_$repoKey"
+    # "Local\" (per-session) NOT "Global\": creating a Global\ mutex needs
+    # SeCreateGlobalPrivilege, which a standard (non-elevated) user lacks, so
+    # New-Object threw UnauthorizedAccessException -> the catch below failed
+    # OPEN (createdNew=true) and the guard never deduped, allowing duplicate
+    # watchers. The watcher and its relaunchers always share one interactive
+    # session, so a session-local mutex is the correct scope anyway.
+    $mutexName = "Local\WowDevSync_$repoKey"
     $createdNew = $false
     try {
         $script:InstanceMutex = New-Object System.Threading.Mutex($true, $mutexName, [ref]$createdNew)
@@ -55,7 +61,9 @@ if (-not $DryRun) {
 # All WoW client versions the library targets. The script copies into every
 # version directory that exists on disk, except the one the source tree already
 # lives in (avoids copying onto itself).
-$WowVersions = @("_classic_era_", "_classic_", "_anniversary_", "_retail_")
+# WoW Forever installs as "_classic_beta_" (product wow_classic_beta, 1.60.x ->
+# Interface 16001), not under a "forever" folder name.
+$WowVersions = @("_classic_era_", "_classic_", "_anniversary_", "_retail_", "_classic_beta_")
 
 # Build list of addon install directories that actually exist on disk
 $Destinations = foreach ($ver in $WowVersions) {
