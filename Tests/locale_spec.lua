@@ -155,8 +155,23 @@ describe("LibLocaleOverride: override resolution", function()
 	end)
 
 	it("lazily builds for GetActiveCode without creating a registry entry for a stranger", function()
-		assert.is_nil(lib:GetActiveCode("NeverRegistered"))
-		assert.is_nil(lib.registry["NeverRegistered"])   -- a getter must not register an addon
+		-- A getter must not register an addon. Asserted as "the registry gained no
+		-- entry at all" rather than is_nil on a literal key, which would still pass
+		-- if the registry were keyed some other way than we guessed.
+		local function count()
+			local n = 0
+			for _ in pairs(lib.registry) do n = n + 1 end
+			return n
+		end
+		local stranger = "NeverRegistered"
+		local before = count()
+		assert.is_nil(lib:GetActiveCode(stranger))
+		assert.equal(before, count())
+		-- ...and the same name DOES appear once it registers, so the check above
+		-- is looking at the table registration actually writes to.
+		lib:RegisterLocale(stranger, "enUS", { K = "en" }, true)
+		assert.equal(before + 1, count())
+		assert.is_table(lib.registry[stranger])
 	end)
 end)
 
