@@ -52,11 +52,17 @@ myText:SetText(LLO:Shape(line))              -- Shape AFTER format(), never on t
 
 <p>Second, <code>Shape</code> <em>costs nothing on text that isn't right-to-left</em>: a string with no Hebrew or Arabic character comes back byte-identical, so you can wrap every display string instead of branching on the active locale. It is the UI-label subset of bidirectional layout, not the full algorithm, and has one known limit: a Latin phrase that <em>contains</em> a bracket pair next to right-to-left text — <code>Foo (Bar) &lt;hebrew&gt;</code> — comes back with its pieces re-ordered. A lone bracketed word (<code>&lt;hebrew&gt; (Beta)</code>) is fine.</p>
 
-<p><strong>Supported clients</strong>, from one TOC: Classic Era, Anniversary / Burning Crusade, Wrath, Cataclysm, Mists of Pandaria Classic, Retail (Midnight), and World of Warcraft: Forever. The compatibility list is checked by the library's own test suite against every installed addon that depends on it, so a dependant is never held back by this library showing as out of date.</p>
+<p><strong>Supported clients</strong>, from one TOC: Classic Era, Anniversary / Burning Crusade, Wrath, Cataclysm, Mists of Pandaria Classic, Retail (Midnight), and World of Warcraft: Forever. On Forever and Retail, text the game keeps hidden from addons (such as some tooltip lines) is left exactly as the game drew it. The compatibility list is checked by the library's own test suite against every installed addon that depends on it, so a dependant is never held back by this library showing as out of date.</p>
 
-<p><strong>Version stamps:</strong> LibStub <code>MINOR</code> 16; the AceGUI, RTL and language-name satellites carry their own stamps (<code>_aceguiMinor</code> 4, <code>_rtlMinor</code> 2, <code>_namesMinor</code> 1) and upgrade independently, so the newest copy of each file wins regardless of load order.</p>
+<p><strong>Version stamps:</strong> LibStub <code>MINOR</code> 17; the AceGUI, RTL and language-name satellites carry their own stamps (<code>_aceguiMinor</code> 4, <code>_rtlMinor</code> 3, <code>_namesMinor</code> 1) and upgrade independently, so the newest copy of each file wins regardless of load order.</p>
 
 <h2>Recent Updates</h2>
+
+<p><strong>v0.3.5 (2026-09-29)</strong> — no more errors from game tooltips on World of Warcraft: Forever and Retail</p>
+<p><strong>Fixed</strong></p>
+<ul>
+<li>On World of Warcraft: Forever and Retail, the game now hides some of its own text from addons (for example tooltip lines about what's under your mouse). When an addon asked this library to re-font a window that happened to include such text, it raised a Lua error every time. That hidden text is now left exactly as the game drew it, and everything else in the window is still fonted. Classic Era, Anniversary and Mists of Pandaria Classic do not hide text this way and behave exactly as before.</li>
+</ul>
 
 <p><strong>v0.3.4 (2026-09-20)</strong> — loads on World of Warcraft: Forever and on Retail 12.1</p>
 <p><strong>Changed</strong></p>
@@ -88,18 +94,7 @@ myText:SetText(LLO:Shape(line))              -- Shape AFTER format(), never on t
 <li>New helper lets an addon print chat messages in your actual WoW client language instead of a chosen override language. The game's shared chat box can only draw the languages WoW ships, so a message in (say) Bengali or Dutch would otherwise show as boxes; addons can now keep their in-window text in your chosen language while chat lines stay in a language the chat box can render.</li>
 </ul>
 
-<p><strong>v0.3.0 (2026-06-25)</strong> — native numbers, buttons &amp; dropdowns, no more boxed Latin</p>
-<ul>
-<li>Numbers can display in a language's own digits (Bengali ০-৯, Hindi, Arabic, and more) — and it leaves colour codes, icons and links untouched.</li>
-<li>Buttons now font correctly in every state (including while hovered) and automatically grow to fit a longer translated word, so labels never overflow or turn into boxes.</li>
-<li>The open list of a native Blizzard dropdown menu now fonts correctly for the chosen language — previously only the selected value did.</li>
-<li>Fonting a whole window now covers its buttons automatically, in one call.</li>
-<li>Tab strips keep their selected/unselected colours correctly even when using a bundled font.</li>
-<li>Fixed Bengali and Punjabi text being mistaken for Hindi (a shared punctuation mark) and rendering as boxes.</li>
-<li>Bundled fonts now include the Latin alphabet, so English names, slash-commands or brands sitting inside translated text show up instead of empty boxes.</li>
-</ul>
-
-<p>Older release notes (v0.2.0 and v0.1.0) are in the addon's full changelog.</p>
+<p>Older release notes (v0.3.0 and earlier) are in the addon's full changelog.</p>
 
 <h2>Community</h2>
 
@@ -107,4 +102,4 @@ myText:SetText(LLO:Shape(line))              -- Shape AFTER format(), never on t
 
 <h2>License</h2>
 
-<p>MIT. The locale-merging core, the font routing and the BiDi/shaping logic are an original implementation. Bundled and adapted third-party assets: the public-domain <strong>LibStub</strong>; <strong>Google Noto</strong> and <strong>Sarabun</strong> fonts under the SIL Open Font License 1.1, each shipping its own <code>OFL.txt</code> under <code>fonts/&lt;Script&gt;/</code>; and the Arabic/Persian/Urdu base-letter to presentation-form tables, generated from the Unicode Arabic Presentation Forms via <a href="https://github.com/mpcabd/python-arabic-reshaper">python-arabic-reshaper</a> (MIT, © Abdullah Diab), with the reshaping/ligature approach seeded by <a href="https://github.com/DiNaSoR/Arabic_Reshaper_LUA">Arabic_Reshaper_LUA</a> (MIT).</p>
+<p>MIT. The locale-merging core, the font routing and the BiDi/shaping logic are an original implementation. Bundled and adapted third-party assets: the public-domain <strong>LibStub</strong>; <strong>Google Noto</strong> and <strong>Sarabun</strong> fonts under the SIL Open Font License 1.1, each shipping its own <code>OFL.txt</code> under <code>fonts/&lt;Script&gt;/</code>; and the Arabic/Persian/Urdu base-letter to presentation-form tables, generated from the Unicode Arabic Presentation Forms via <strong>python-arabic-reshaper</strong> (MIT, © Abdullah Diab), with the reshaping/ligature approach seeded by <strong>Arabic_Reshaper_LUA</strong> by DiNaSoR (MIT).</p>

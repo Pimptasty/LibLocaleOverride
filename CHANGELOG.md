@@ -1,5 +1,46 @@
 # Lib: LocaleOverride
 
+## [v0.3.5] (2026-09-29) -- secret strings are left untouched on WoW Forever and retail (MINOR 17)
+
+### `FontForText` compared a secret string and raised on every tooltip a consumer's walk reached
+
+- **The report** (FastGuildInvite, inbox `e1003283`, 19x on WoW Forever):
+  `LibLocaleOverride-1.0.lua:757: attempt to compare local 'text' (a secret string value, while
+  execution tainted by 'LibLocaleOverride')`, via `ApplyFontToFrame` -> `walkFonts` ->
+  `ApplyFontToString` -> `FontForText`. FGI's `GameTooltip:Show` hook walked Blizzard's world-cursor
+  tooltip, whose lines are secret values, and I compared the text (`text == ""`) without asking first.
+  FGI has fixed its side; the library is still the one place any consumer's walk funnels through, so
+  it guards once for all of them.
+- **The fix:** a file-local `isSecret(v)` calls `issecretvalue` -- documented in the Forever tree's
+  `FrameScriptDocumentation.lua` ("Returns true if a supplied value is a secret value"), and the
+  wiki's Secret Values page confirms it is the test tainted code is meant to branch on. It is looked
+  up at CALL time and feature-detected, so on Classic clients without it the check is a constant
+  false and nothing changes. Every entry point that reads text now asks it first:
+  - `ApplyFontToString` returns before touching the FontString at all -- not even `opts.base` -- when
+    its text is secret. The text is Blizzard's, not the consumer's.
+  - `ApplyFontToButton` returns before caching stock fonts, swapping state fonts or auto-fitting
+    when the button's label (its fontstring, `.label`, or `GetText`) is secret. All three would
+    compare or measure the text.
+  - `FontForText` returns nil, `LocalizeDigits` and `lib:Shape` (RTL) return the value unchanged,
+    and `SplitToBytes` returns `{}` ("won't send") for a secret.
+- **Specs:** four in `Tests/font_apply_spec.lua` ("secret text"), using the harness's
+  `wow.secretValue`, which raises on index / method call / concatenation. **Driven red first** with
+  the guard disabled: all four raised. Note the harness cannot intercept `==` against a plain
+  string, so offline the red comes from the `text:gsub` one line after the comparison the client
+  refused -- same path, one operation on.
+- **Version stamps:** core `MINOR` 16 -> 17, and the RTL satellite's `_rtlMinor` 2 -> 3 because
+  `lib:Shape` changed. Without the second bump, an older embedded RTL copy stamped 2 that loaded
+  first would win, and `Shape` would still touch a secret.
+- **Suite:** 242 specs, 100% line coverage on all four shipped files.
+
+### Dev tooling: `wow-version-replication.ps1` no longer deletes a replica whose source still exists
+
+- Peer review from TOGProfessionMaster: an editor that saves by REPLACING a file can make it briefly
+  absent, and `Sync-File`'s `Deleted` branch then removed it from every replica install. This copy
+  of the script polls every 2 s rather than using `Register-ObjectEvent`, so the file came back on the
+  next poll. The guard is added anyway: `Deleted` becomes `Changed` when `Test-Path` still finds the
+  source. The script is dev-only (`*.ps1` is in `.pkgmeta` ignore) and does not ship.
+
 ## [v0.3.4] (2026-09-20) -- WoW Forever and Midnight 12.1 in the interface list, asserted not transcribed
 
 No Lua behaviour changes and no `MINOR` bump: the shipped `.lua` files differ from v0.3.3 only in

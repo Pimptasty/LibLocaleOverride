@@ -6,19 +6,26 @@ addons, plus a **bundled-font manager** for scripts the WoW client can't render
 
 ## Status
 
-**v0.3.4** -- runtime per-addon language override; a script-aware bundled-font
+**v0.3.5** -- runtime per-addon language override; a script-aware bundled-font
 manager covering most of the world's scripts (with Latin merged in, so embedded
 brand/command text never boxes); **locale-native numerals**; full **button** and
 **native-dropdown** fonting that sizes to the width a non-Latin label is actually painted
 at; a **client-locale resolver** (`GetClientLocale`) for chat/print output in a
 chat-renderable language; right-to-left support (Hebrew + Arabic / Persian / Urdu,
 with Arabic contextual shaping); and optional AceGUI integration -- a two-column language
-picker and an automatic tab-font handler. First consumer: **FastGuildInvite**.
+picker and an automatic tab-font handler. Consumers that hard-depend on it: **FastGuildInvite**
+(the first) and **Dibs**, on every client each one ships for, WoW: Forever included.
 
-LibStub `MINOR` **16**. The three satellite files carry their own version stamps and
-upgrade independently of the core: `_aceguiMinor` 4, `_rtlMinor` 2, `_namesMinor` 1.
+LibStub `MINOR` **17**. The three satellite files carry their own version stamps and
+upgrade independently of the core: `_aceguiMinor` 4, `_rtlMinor` 3, `_namesMinor` 1.
 
-**v0.3.4 adds no API and changes no behaviour.** It widens the TOC's `## Interface` list to
+**v0.3.5 is a fix for WoW Forever and Retail.** Those clients hand addons _secret_ strings
+for some Blizzard text (tooltip lines, for example), and tainted code errors on comparing
+one. Every entry point that reads text now asks `issecretvalue` first and leaves a secret
+untouched; Classic clients have no such function and behave exactly as before. No API
+change.
+
+v0.3.4 added no API and changed no behaviour. It widened the TOC's `## Interface` list to
 cover World of Warcraft: Forever (`16001`) and Retail 12.1 (`120100`) -- a hard dependency
 the client flags out of date stops the consumer loading -- and adds a spec that asserts
 the list against the installed consumers and client rather than transcribing it. v0.3.3
@@ -131,6 +138,11 @@ edges. (`button.lloFitPad` tunes the padding but does **not** exempt it.)
   retail's `|cn<NAME>:` named colour tokens, `|T..|t`, `|A..|a` or `|H..|h`. Pass it whole
   display strings; do not pre-split around escapes.
 - **`ApplyStored` early at login** restores the override before your first `GetLocale`.
+- **Secret text is skipped, not fonted.** On WoW Forever / Retail, a FontString whose text
+  is a secret value (Blizzard's tooltip lines, for example) is left untouched by
+  `ApplyFontToFrame` / `ApplyFontToString` / `ApplyFontToButton`, and `FontForText`,
+  `LocalizeDigits`, `Shape` and `SplitToBytes` hand a secret back without reading it. Walking
+  a Blizzard-owned frame is therefore safe, but nothing on it gets re-fonted.
 
 ## Development
 
@@ -142,7 +154,7 @@ lua Tests/wowapi/coverage.lua LibLocaleOverride-1.0.lua LibLocaleOverride-Langua
     LibLocaleOverride-AceGUI-1.0.lua LibLocaleOverride-RTL-1.0.lua
 ```
 
-238 specs, **100% line coverage on all four shipped files**. It needs nothing
+242 specs, **100% line coverage on all four shipped files**. It needs nothing
 but a Lua 5.1 interpreter; `Tests/wowapi` is the shared
 [WoWAPITesting](https://github.com/Pimptasty/WoWAPITesting) harness as a submodule, and
 `Tests` is excluded from the packaged zip. The library is loaded from this working tree

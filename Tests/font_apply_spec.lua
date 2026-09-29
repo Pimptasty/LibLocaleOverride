@@ -566,6 +566,64 @@ describe("lib:ApplyFontToFrame -- the recursive walk", function()
 	end)
 end)
 
+-- SECRET VALUES (WoW Forever / retail 12.x). A consumer's frame walk can reach a FontString Blizzard
+-- filled from protected data -- FastGuildInvite's GameTooltip:Show hook walked the world-cursor
+-- tooltip -- and GetText() then returns a secret string. The client raised at FontForText's
+-- `text == ""` ("attempt to compare local 'text' (a secret string value ...)", inbox e1003283).
+-- The library must leave such a string, and a button labelled with one, exactly as it found it.
+--
+-- `wow.secretValue` raises on every touch Lua 5.1 lets a table intercept (index, method call,
+-- concatenation, `<`), which is how these go red against the unguarded code: the `==` the client
+-- refused is NOT interceptable here (5.1 runs __eq only between two tables), so the red comes from
+-- the `text:gsub` one line later. Same path, one operation on.
+describe("secret text (WoW Forever / retail)", function()
+	local addon
+	before_each(function()
+		H.reset()
+		addon = H.addon()
+		lib:RegisterLocale(addon, "enUS", { K = "en", ["1"] = "\217\161" }, true)
+	end)
+
+	it("the frame walk leaves a secret FontString untouched and still fonts its siblings", function()
+		local frame = CreateFrame("Frame", nil, UIParent)
+		local secret = frame:CreateFontString(nil, "ARTWORK")
+		secret:SetText(wow.secretValue("tooltip line"))
+		local plain = frame:CreateFontString(nil, "ARTWORK")
+		plain:SetText(T.thai)
+		lib:ApplyFontToFrame(addon, frame)
+		assert.is_nil(secret:GetFontObject())
+		assert.equal(lib.scripts.Thai.font, (plain:GetFontObject():GetFont()))
+	end)
+
+	it("does not apply opts.base to a secret string either", function()
+		local fs = H.fontString()
+		fs:SetText(wow.secretValue("unit name"))
+		lib:ApplyFontToString(fs, addon, { base = _G.GameFontNormalSmall })
+		assert.is_nil(fs:GetFontObject())
+	end)
+
+	it("leaves a button with a secret label alone: fonts and width", function()
+		local root = CreateFrame("Frame", nil, UIParent)
+		local b = CreateFrame("Button", nil, root)
+		local fs = b:CreateFontString(nil, "ARTWORK")
+		b:SetFontString(fs)
+		b:SetNormalFontObject(_G.GameFontNormal)
+		b:SetWidth(40)
+		fs:SetText(wow.secretValue("button label"))
+		lib:ApplyFontToFrame(addon, root)
+		assert.equal(_G.GameFontNormal, b:GetNormalFontObject())
+		assert.equal(40, b:GetWidth())
+	end)
+
+	it("the text entry points hand a secret back without reading it", function()
+		local s = wow.secretValue("payload")
+		assert.is_nil(lib:FontForText(addon, s))
+		assert.equal(s, lib:LocalizeDigits(addon, s))
+		assert.same({}, lib:SplitToBytes(s))
+		assert.equal(s, lib:Shape(s))
+	end)
+end)
+
 -- The open list of a Blizzard UIDropDownMenu lives in the SHARED global frames DropDownList1/2,
 -- parented to UIParent rather than to the consumer's window -- which is exactly why a normal frame
 -- walk never reaches it, and why a dropdown's collapsed text fonts correctly while its open items

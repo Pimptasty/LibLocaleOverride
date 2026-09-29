@@ -25,7 +25,7 @@ if not lib then return end
 
 -- Satellite version stamp (no NewLibrary guard of its own); newest copy wins regardless of
 -- load order. Bump on every change to THIS file.
-local RTL_MINOR = 2
+local RTL_MINOR = 3
 if (lib._rtlMinor or 0) >= RTL_MINOR then return end
 lib._rtlMinor = RTL_MINOR
 
@@ -307,6 +307,9 @@ end
 --- ships avoids the failing shape; a consumer wrapping arbitrary strings is not bound
 --- by that and should know.
 function lib:Shape(text)
+	-- A SECRET string (WoW Forever / retail 12.x) cannot be compared or scanned from tainted code;
+	-- hand it back unshaped. issecretvalue is absent on Classic, where this is a no-op.
+	if _G.issecretvalue and _G.issecretvalue(text) then return text end
 	if not text or text == "" or not hasRTL(text) then return text end
 	return visualOrder(reshapeArabic(text))
 end

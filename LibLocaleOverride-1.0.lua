@@ -52,7 +52,7 @@ LibStub. License: MIT (see LICENSE).
 -- Bump MINOR on every code change so the newest copy wins LibStub's load race over any
 -- older embedded copy (fonts, RTL, AceGUI picker, tab handler, SplitToBytes were all
 -- added after the initial MINOR=1).
-local MAJOR, MINOR = "LibLocaleOverride-1.0", 16
+local MAJOR, MINOR = "LibLocaleOverride-1.0", 17
 assert(LibStub, MAJOR .. " requires LibStub")
 
 local lib = LibStub:NewLibrary(MAJOR, MINOR)
@@ -75,6 +75,21 @@ if not lib then return end   -- an equal or newer copy is already loaded
 --   callbacks = { fn, ... },
 -- }
 lib.registry = lib.registry or {}
+
+-- SECRET VALUES (WoW Forever / retail 12.x). A FontString Blizzard fills from protected data --
+-- a world-cursor tooltip line, a unit name -- returns a SECRET string from GetText(), and tainted
+-- code (every addon, this library included) errors on comparing, matching or indexing one:
+-- "attempt to compare local 'text' (a secret string value, while execution tainted by
+-- 'LibLocaleOverride')". Storing and passing one is allowed; issecretvalue() is the documented
+-- test (FrameScriptDocumentation.lua in the forever tree) and clears the taint on the branch it
+-- guards. Every entry point that reads text checks it FIRST and leaves a secret untouched --
+-- there is nothing to font or rewrite that we are allowed to see. Classic clients have no
+-- issecretvalue, so the check is feature-detected and is a constant false there. Looked up at
+-- CALL time, not captured at load: the global can be installed after this file runs.
+local function isSecret(v)
+	local probe = _G.issecretvalue
+	return probe ~= nil and probe(v) and true or false
+end
 
 -- Bundled fonts for scripts the WoW client can't render on non-native builds,
 -- organized by SCRIPT and shipped under fonts/<Script>/. A consumer gets these
@@ -253,7 +268,11 @@ function lib:ApplyFontToString(fs, addon, opts)
 	elseif opts.byLocale then
 		path = addon and self:GetFont(addon)
 	else
-		path = addon and self:FontForText(addon, fs.GetText and fs:GetText())
+		local text = fs.GetText and fs:GetText()
+		-- A secret string is Blizzard's (a tooltip line a consumer's frame walk reached), not the
+		-- consumer's: leave the FontString exactly as it is, base font included.
+		if isSecret(text) then return end
+		path = addon and self:FontForText(addon, text)
 	end
 	local obj
 	if path then
@@ -332,6 +351,17 @@ end
 
 function lib:ApplyFontToButton(addon, button)
 	if type(button) ~= "table" or type(button.GetNormalFontObject) ~= "function" then return end
+	-- A button whose label is a SECRET string is Blizzard's; leave it untouched -- no font swap,
+	-- no restore, no auto-fit (all of which would compare or measure the text). Checked before
+	-- the font cache below so we never record state for a button we will not manage.
+	do
+		local fs0 = button.GetFontString and button:GetFontString()
+		if not fs0 and type(button.label) == "table" and button.label.GetStringWidth then fs0 = button.label end
+		if (fs0 and fs0.GetText and isSecret(fs0:GetText()))
+		   or (button.GetText and isSecret(button:GetText())) then
+			return
+		end
+	end
 	-- Cache the stock per-state fonts -- but "once per FRAME" is not the same as "once per BUTTON",
 	-- and the frame is POOLED. AceGUI hands the same table out again to whoever asks next, so a
 	-- cache left on it describes a button that no longer exists and the restore path would put back
@@ -754,6 +784,7 @@ end
 --- own script regardless of the chosen UI language. Returns nil when no bundled
 --- script matches (the client's default font already renders the text).
 function lib:FontForText(addon, text)
+	if isSecret(text) then return nil end   -- cannot be read, so no script to detect
 	if not text or text == "" then return nil end
 	-- The danda (U+0964 "।") and double danda (U+0965 "॥") are sentence punctuation
 	-- SHARED across Bengali / Gurmukhi / Devanagari and other North-Indic scripts, yet
@@ -794,7 +825,7 @@ end
 --- portion of a hyperlink |H...|h are all skipped. Returns `text` unchanged when the
 --- active locale defines no digit override (Latin/Cyrillic/CJK locales — L["0"]=="0").
 function lib:LocalizeDigits(addon, text)
-	if type(text) ~= "string" or text == "" then return text end
+	if isSecret(text) or type(text) ~= "string" or text == "" then return text end
 	local reg = self.registry[addon]
 	local L = reg and reg.active
 	if not L then return text end
@@ -915,7 +946,8 @@ end
 function lib:SplitToBytes(text, maxBytes)
 	maxBytes = tonumber(maxBytes) or 255
 	if maxBytes < 1 then maxBytes = 255 end
-	if not text or text == "" then return {} end   -- nothing to send (no empty chunk)
+	-- A secret cannot be measured or split; treat it like an unsplittable token ("won't send").
+	if isSecret(text) or not text or text == "" then return {} end   -- nothing to send (no empty chunk)
 	local out = { "" }
 	while #text > 0 do
 		local _, e = text:find("[%s%.%,]")

@@ -224,6 +224,13 @@ function Sync-File([string]$fullPath, [string]$verb) {
         return
     }
 
+    # An editor that saves by REPLACING a file can make it briefly absent between the poll's
+    # Test-Path and this call. If the source is back, deleting it from every replica would be
+    # wrong -- treat it as a change instead. (Peer review from TOGProfessionMaster, 2026-09-27.)
+    if ($verb -eq "Deleted" -and (Test-Path -LiteralPath $fullPath)) {
+        $verb = "Changed"
+    }
+
     $ts = Get-Date -Format "HH:mm:ss"
     $tag = if ($DryRun) { "WOULD" } else { $verb }
 
